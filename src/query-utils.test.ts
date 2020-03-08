@@ -1,7 +1,7 @@
 /* A few unit test I've used to quickly check my implementation */
 
 import JSBI from 'jsbi';
-import { scanQuery, formatQuery, BCD2int, int2BCD } from './queryutils';
+import { scanQuery, formatQuery, BCD2int, int2BCD } from './query-utils';
 import { assertString, arrayBuffersAreEqual, assert } from './utils';
 
 describe('formatQuery', function() {

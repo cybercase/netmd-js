@@ -1,2 +1,2 @@
 export { NetMD } from './netmd';
-export { NetMDInterface } from './netmdinterface';
+export { NetMDInterface } from './netmd-interface';

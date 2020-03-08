@@ -145,3 +145,31 @@ export function wordArrayToByteArray(wordArray: any, length: number = wordArray.
     }
     return res;
 }
+
+export function timeToFrames(time: number[]) {
+    assert(time.length === 4);
+    return ((time[0] * 60 + time[1]) * 60 + time[2]) * 512 + time[3];
+}
+
+export function pad(str: string | number, pad: string) {
+    return (pad + str).slice(-pad.length);
+}
+
+export function formatTimeFromFrames(value: number) {
+    let f = value % 512;
+    value = (value - f) / 512; // sec
+
+    let s = value % 60;
+    value = (value - s) / 60; // min
+
+    let m = value % 60;
+    value = (value - m) / 60; // hour
+
+    let h = value;
+
+    return `${pad(h, '00')}:${pad(m, '00')}:${pad(s, '00')}+${pad(f, '000')}`;
+}
+
+export function sanitizeTrackTitle(title: string) {
+    return encodeURIComponent(title);
+}

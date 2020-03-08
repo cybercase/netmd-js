@@ -1,5 +1,5 @@
 import { NetMD } from './netmd';
-import { formatQuery, scanQuery, BCD2int, int2BCD } from './queryutils';
+import { formatQuery, scanQuery, BCD2int, int2BCD } from './query-utils';
 import {
     concatArrayBuffers,
     stringToCharCodeArray,
@@ -111,7 +111,7 @@ class NetMDRejected extends NetMDError {
 }
 
 export class NetMDInterface {
-    constructor(private netMd: NetMD) {}
+    constructor(public netMd: NetMD) {}
 
     async sendQuery(query: ArrayBuffer, test = false) {
         await this.sendCommand(query, test);
@@ -359,18 +359,18 @@ export class NetMDInterface {
 
     async getTrackGroupList() {
         let rawTitle = await this._getDiscTitle();
-        let grouList = rawTitle.split('//');
+        let groupList = rawTitle.split('//');
         let trackDict: { [k: number]: [string, number] } = {};
         let trackCount = await this.getTrackCount();
         let result: [string | null, number[]][] = [];
-        for (const [groupIndex, group] of grouList.entries()) {
+        for (const [groupIndex, group] of groupList.entries()) {
             if (group === '') {
                 continue;
             }
             if (group[0] === '0' || group.indexOf(';') === -1) {
                 continue;
             }
-            const [trackRange, groupName] = group.split(';', 1);
+            const [trackRange, groupName] = group.split(';', 2);
             let trackMinStr: string, trackMaxStr: string;
             if (trackRange.indexOf('-') >= 0) {
                 [trackMinStr, trackMaxStr] = trackRange.split('-');
@@ -629,24 +629,25 @@ export class NetMDInterface {
         discformat: number,
         frames: number,
         pktSize: number,
-        packets: Iterable<[Uint8Array, Uint8Array, Uint8Array]>,
-        hexSessionKey: string
+        packets: AsyncIterable<[Uint8Array, Uint8Array, Uint8Array]>,
+        hexSessionKey: string,
+        progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void
     ) {
         if (hexSessionKey.length !== 16) {
             throw new Error('Supplied Session Key length wrong');
         }
 
-        const totalbytes = pktSize + 24; //framesizedict[wireformat] * frames + pktcount * 24;
+        const totalBytes = pktSize + 24; //framesizedict[wireformat] * frames + pktcount * 24;
 
-        const query = formatQuery('1800 080046 f0030103 28 ff 000100 1001 ffff 00 %b %b %d %d', wireformat, discformat, frames, totalbytes);
+        const query = formatQuery('1800 080046 f0030103 28 ff 000100 1001 ffff 00 %b %b %d %d', wireformat, discformat, frames, totalBytes);
         let reply = await this.sendQuery(query);
         scanQuery(reply, '1800 080046 f0030103 28 00 000100 1001 %?%? 00 %*');
 
         const swapNeeded = !isBigEndian();
-        console.log('ENTERING THE LOOP', totalbytes, frames, pktSize);
         let packetCount = 0;
-        let transferredSize = 0;
-        for (const [key, iv, data] of packets) {
+        let writtenBytes = 0;
+        for await (const [key, iv, data] of packets) {
+            progressCallback && progressCallback({ totalBytes, writtenBytes });
             let binpack: Uint8Array;
             if (packetCount === 0) {
                 let packedLength = new Uint8Array(new Uint32Array([pktSize]).buffer);
@@ -660,9 +661,9 @@ export class NetMDInterface {
 
             await this.netMd.writeBulk(binpack);
             packetCount += 1;
-            transferredSize += data.length;
-            console.log(`Transferred ${transferredSize} / ${pktSize}`, ~~((transferredSize / pktSize) * 100) + '%');
+            writtenBytes += data.length;
         }
+        progressCallback && progressCallback({ totalBytes, writtenBytes });
 
         reply = await this.readReply();
         await this.netMd.getReplyLength();
@@ -742,7 +743,16 @@ export class EKBOpenSource {
 }
 
 export class MDTrack {
-    constructor(public title: string, public format: Wireformat, public data: ArrayBuffer) {}
+    constructor(
+        public title: string,
+        public format: Wireformat,
+        public data: ArrayBuffer,
+        public encryptPacketsIterator?: (params: {
+            kek: Uint8Array;
+            frameSize: number;
+            data: ArrayBuffer;
+        }) => AsyncIterableIterator<[Uint8Array, Uint8Array, Uint8Array]>
+    ) {}
 
     getTitle() {
         return this.title;
@@ -804,7 +814,50 @@ export class MDTrack {
         return [[datakey, firstiv, encryptedData]];
     }
 
-    *getPacketIterator(): Generator<[Uint8Array, Uint8Array, Uint8Array]> {
+    getPacketWorkerIterator(): AsyncIterableIterator<[Uint8Array, Uint8Array, Uint8Array]> {
+        return this.encryptPacketsIterator!({
+            kek: this.getKEK(),
+            data: this.data,
+            frameSize: this.getFrameSize(),
+        });
+        // const initWorker = () => {
+        //     const kek = this.getKEK();
+        //     encryptWorker.postMessage(
+        //         {
+        //             action: 'init',
+        //             data: this.data,
+        //             frameSize: this.getFrameSize(),
+        //             kek: kek,
+        //         },
+        //         [this.data, kek]
+        //     );
+        // };
+        // const askNextChunk = () => {
+        //     encryptWorker.postMessage({ action: 'getChunk' });
+        // };
+        // const waitForNextChunk = () => {
+        //     return new Promise(resolve => {
+        //         encryptWorker.addEventListener(
+        //             'message',
+        //             ev => {
+        //                 console.log('MAIN', ev.data);
+        //                 resolve(ev.data);
+        //             },
+        //             { once: true }
+        //         );
+        //     });
+        // };
+        // initWorker();
+        // askNextChunk();
+        // let chunk = await waitForNextChunk();
+        // while (chunk !== null) {
+        //     askNextChunk();
+        //     yield chunk as [Uint8Array, Uint8Array, Uint8Array];
+        //     chunk = await waitForNextChunk();
+        // }
+    }
+
+    async *getPacketIterator(): AsyncIterableIterator<[Uint8Array, Uint8Array, Uint8Array]> {
         let iv = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
         let ivWA = Crypto.lib.WordArray.create(iv) as any;
 
@@ -883,10 +936,9 @@ export class MDSession {
         this.hexSessionKey = retailmac(this.ekbobject.getRootKey(), nonce);
     }
 
-    async downloadTrack(trk: MDTrack) {
+    async downloadTrack(trk: MDTrack, progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void) {
         if (!this.hexSessionKey) {
-            assert(false, `Call init first!`);
-            return;
+            throw new Error(`Call init first!`);
         }
         await this.md.setupDownload(trk.getContentID(), trk.getKEK(), this.hexSessionKey);
         let dataFormat = trk.getDataFormat();
@@ -895,8 +947,9 @@ export class MDSession {
             discforwire[dataFormat],
             trk.getFrameCount(),
             trk.getTotalSize(),
-            trk.getPacketIterator(),
-            this.hexSessionKey!
+            trk.getPacketWorkerIterator(),
+            this.hexSessionKey!,
+            progressCallback
         );
         await this.md.cacheTOC();
         await this.md.setTrackTitle(track, trk.title);

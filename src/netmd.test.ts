@@ -1,13 +1,14 @@
 import { usb } from 'webusb';
 import { NetMD } from './netmd';
-import bunyan from 'bunyan';
+import { ConsoleLogger } from './logger';
 
 describe('Simple Queries', function() {
     let device: USBDevice;
     let netmd: NetMD;
 
     beforeEach(async function() {
-        const testLogger = bunyan.createLogger({ name: 'test', level: 'debug' });
+        // const testLogger = bunyan.createLogger({ name: 'test', level: 'debug' });
+        let testLogger = new ConsoleLogger(0);
 
         device = await usb.requestDevice({ filters: [{ vendorId: 0x054c, productId: 0x00c8 }] });
         netmd = new NetMD(device, 0, testLogger);
