@@ -21,12 +21,27 @@ const Flag: { [k: number]: string } = {
     [TrackFlag.unprotected]: 'unprotected',
 };
 
-export async function openInterface(usb: USB, logger?: Logger) {
+export async function openPairedDevice(usb: USB, logger?: Logger) {
+    let devices = await usb.getDevices();
+    if (devices.length === 0) {
+        return null; // No device found
+    }
+
+    let netmd = new NetMD(devices[0], 0, logger);
+    await netmd.init();
+    return new NetMDInterface(netmd);
+}
+
+export async function openNewDevice(usb: USB, logger?: Logger) {
     let filters = DevicesIds.map(({ vendorId, deviceId }) => ({ vendorId, deviceId }));
-    let device = await usb.requestDevice({ filters });
+    let device: USBDevice;
+    try {
+        device = await usb.requestDevice({ filters });
+    } catch (err) {
+        return null; // No device found or not allowed by the user
+    }
     let netmd = new NetMD(device, 0, logger);
     await netmd.init();
-
     return new NetMDInterface(netmd);
 }
 

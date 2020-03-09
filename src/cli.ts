@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import fs from 'fs';
+import path from 'path';
 
 import yargs from 'yargs';
 import { usb } from 'webusb';
-import { download, listDevice, listContent, openInterface, Disc, countTracksInDisc, Device } from './netmd-commands';
+import { download, listDevice, listContent, openNewDevice, Disc, countTracksInDisc, Device } from './netmd-commands';
 import { MDTrack, Wireformat } from './netmd-interface';
 import { pad, formatTimeFromFrames, sanitizeTrackTitle } from './utils';
-import { getAsyncPacketIterator } from './encrypt-generator';
-import { getAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker';
+import { makeGetAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker';
+import { Worker } from 'worker_threads';
 
 async function main() {
     const args = yargs
@@ -25,7 +26,11 @@ async function main() {
             'list device content',
             yargs => {},
             async argv => {
-                let netmdInterface = await openInterface(usb);
+                let netmdInterface = await openNewDevice(usb);
+                if (netmdInterface === null) {
+                    printNotDeviceFound();
+                    return;
+                }
                 let content = await listContent(netmdInterface);
                 printDisc(content);
             }
@@ -67,11 +72,17 @@ async function main() {
                 const format = stringToWirefromat[argv.format];
                 const title = argv.title || sanitizeTrackTitle(argv.inputfile);
 
-                // let worker = new NodeWorker('./dist/encrypt-worker.js');
-
+                const getAsyncPacketIteratorOnWorkerThread = makeGetAsyncPacketIteratorOnWorkerThread(
+                    new Worker(path.join(__dirname, 'node-encrypt-worker.js'))
+                );
                 let mdTrack = new MDTrack(title, format, data.buffer, getAsyncPacketIteratorOnWorkerThread);
 
-                let netmdInterface = await openInterface(usb);
+                let netmdInterface = await openNewDevice(usb);
+                if (netmdInterface === null) {
+                    printNotDeviceFound();
+                    return;
+                }
+
                 let start = Date.now();
                 await download(netmdInterface, mdTrack, progressCallback);
                 let stop = Date.now();
@@ -115,4 +126,8 @@ function printDisc(disc: Disc) {
             );
         }
     }
+}
+
+function printNotDeviceFound() {
+    console.log(`No device found`);
 }

@@ -8,11 +8,12 @@ import {
     concatUint8Arrays,
     hexEncode,
     wordArrayToByteArray,
+    sleep,
 } from './utils';
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
 
-export enum Status {
+enum Status {
     // NetMD Protocol return status (first byte of request)
     control = 0x00,
     status = 0x01,
@@ -29,14 +30,14 @@ export enum Status {
     interim = 0x0f,
 }
 
-export enum Action {
+enum Action {
     play = 0x75,
     pause = 0x7d,
     fastForward = 0x39,
     rewind = 0x49,
 }
 
-export enum Track {
+enum Track {
     previous = 0x0002,
     next = 0x8001,
     restart = 0x0001,
@@ -629,7 +630,7 @@ export class NetMDInterface {
         discformat: number,
         frames: number,
         pktSize: number,
-        packets: AsyncIterable<[Uint8Array, Uint8Array, Uint8Array]>,
+        packets: AsyncIterable<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>,
         hexSessionKey: string,
         progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void
     ) {
@@ -646,7 +647,7 @@ export class NetMDInterface {
         const swapNeeded = !isBigEndian();
         let packetCount = 0;
         let writtenBytes = 0;
-        for await (const [key, iv, data] of packets) {
+        for await (const { key, iv, data } of packets) {
             progressCallback && progressCallback({ totalBytes, writtenBytes });
             let binpack: Uint8Array;
             if (packetCount === 0) {
@@ -658,7 +659,6 @@ export class NetMDInterface {
             } else {
                 binpack = data;
             }
-
             await this.netMd.writeBulk(binpack);
             packetCount += 1;
             writtenBytes += data.length;
@@ -751,7 +751,7 @@ export class MDTrack {
             kek: Uint8Array;
             frameSize: number;
             data: ArrayBuffer;
-        }) => AsyncIterableIterator<[Uint8Array, Uint8Array, Uint8Array]>
+        }) => AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>
     ) {}
 
     getTitle() {
@@ -814,47 +814,12 @@ export class MDTrack {
         return [[datakey, firstiv, encryptedData]];
     }
 
-    getPacketWorkerIterator(): AsyncIterableIterator<[Uint8Array, Uint8Array, Uint8Array]> {
+    getPacketWorkerIterator(): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
         return this.encryptPacketsIterator!({
             kek: this.getKEK(),
             data: this.data,
             frameSize: this.getFrameSize(),
         });
-        // const initWorker = () => {
-        //     const kek = this.getKEK();
-        //     encryptWorker.postMessage(
-        //         {
-        //             action: 'init',
-        //             data: this.data,
-        //             frameSize: this.getFrameSize(),
-        //             kek: kek,
-        //         },
-        //         [this.data, kek]
-        //     );
-        // };
-        // const askNextChunk = () => {
-        //     encryptWorker.postMessage({ action: 'getChunk' });
-        // };
-        // const waitForNextChunk = () => {
-        //     return new Promise(resolve => {
-        //         encryptWorker.addEventListener(
-        //             'message',
-        //             ev => {
-        //                 console.log('MAIN', ev.data);
-        //                 resolve(ev.data);
-        //             },
-        //             { once: true }
-        //         );
-        //     });
-        // };
-        // initWorker();
-        // askNextChunk();
-        // let chunk = await waitForNextChunk();
-        // while (chunk !== null) {
-        //     askNextChunk();
-        //     yield chunk as [Uint8Array, Uint8Array, Uint8Array];
-        //     chunk = await waitForNextChunk();
-        // }
     }
 
     async *getPacketIterator(): AsyncIterableIterator<[Uint8Array, Uint8Array, Uint8Array]> {

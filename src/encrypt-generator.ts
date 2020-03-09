@@ -1,6 +1,5 @@
 import Crypto from 'crypto-js';
 import { concatUint8Arrays, wordArrayToByteArray } from './utils';
-import { isMainThread } from 'worker_threads';
 
 export async function* getAsyncPacketIterator({
     data,
@@ -10,7 +9,7 @@ export async function* getAsyncPacketIterator({
     data: ArrayBuffer;
     frameSize: number;
     kek: Uint8Array;
-}): AsyncIterableIterator<[Uint8Array, Uint8Array, Uint8Array]> {
+}): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
     let iv = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
     let ivWA = Crypto.lib.WordArray.create(iv) as any;
 
@@ -63,7 +62,7 @@ export async function* getAsyncPacketIterator({
         let nextIvWA = Crypto.lib.WordArray.create(encryptedDataChunk.subarray(encryptedDataChunk.length - 8, encryptedDataChunk.length));
         let nextiv = wordArrayToByteArray(ivWA);
 
-        yield [key, iv, encryptedDataChunk];
+        yield { key, iv, data: encryptedDataChunk };
 
         ivWA = nextIvWA;
         iv = nextiv;

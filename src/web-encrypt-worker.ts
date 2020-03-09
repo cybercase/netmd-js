@@ -1,5 +1,4 @@
 import { getAsyncPacketIterator } from './encrypt-generator';
-import { Worker, isMainThread, parentPort } from 'worker_threads';
 
 // This generator uses a worker thread to encrypt the nextChunk
 // while yielding the current one.
@@ -14,7 +13,6 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(worker: Worker) {
         kek: Uint8Array;
     }): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
         const w = worker;
-
         const initWorker = () => {
             w.postMessage(
                 {
@@ -32,9 +30,9 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(worker: Worker) {
         };
 
         let resolver: (data: any) => void;
-        w.on('message', msg => {
-            resolver(msg);
-        });
+        w.onmessage = (ev: MessageEvent) => {
+            resolver(ev.data);
+        };
 
         let chunks: Promise<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array } | null>[] = [];
         const queueNextChunk = () => {
@@ -56,34 +54,35 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(worker: Worker) {
         let i = 0;
         while (1) {
             let r = await chunks[i];
-            delete chunks[i];
             if (r === null) {
                 break;
             }
             yield r;
+            delete chunks[i];
             i++;
         }
     };
 }
 
-if (isMainThread) {
-    // Nothing to do
-} else {
+if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {
+    // Worker
     let iterator: AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>;
-    parentPort!.on('message', async msg => {
-        const { action, ...others } = msg;
+    onmessage = async (ev: MessageEvent) => {
+        const { action, ...others } = ev.data;
         if (action === 'init') {
             const { data, frameSize, kek } = others;
             iterator = getAsyncPacketIterator({ data, frameSize, kek });
         } else if (action === 'getChunk') {
             let { value, done } = await iterator.next();
             if (done) {
-                parentPort!.postMessage(null);
-                process.exit(0);
+                postMessage(null);
+                self.close();
             } else {
                 let { key, iv, data }: { key: Uint8Array; iv: Uint8Array; data: Uint8Array } = value;
-                parentPort!.postMessage({ key, iv, data }, [data.buffer]);
+                postMessage({ key, iv, data }, [data.buffer]);
             }
         }
-    });
+    };
+} else {
+    // Main
 }
