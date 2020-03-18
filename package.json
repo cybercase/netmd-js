@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Access to NetMD MiniDisc devices",
   "main": "./dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cybercase/netmd-js.git"
+  },
   "scripts": {
     "test": "jest",
     "build": "tsc && chmod +x dist/cli.js",
@@ -20,14 +24,20 @@
   "bin": {
     "netmdcli": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=12.0.0"
+  },
   "keywords": [
     "MiniDisc",
     "NetMD",
     "WebUSB",
     "Mini Disc"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Stefano Brilli <stefano@brilli.me> (https://stefano.brilli.me/)",
+  "license": "GPL-2.0",
   "devDependencies": {
     "@types/browser-bunyan": "^0.4.5",
     "@types/bunyan": "^1.8.6",
