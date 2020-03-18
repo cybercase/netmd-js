@@ -3,7 +3,10 @@ import { Worker, isMainThread, parentPort } from 'worker_threads';
 
 // This generator uses a worker thread to encrypt the nextChunk
 // while yielding the current one.
-export function makeGetAsyncPacketIteratorOnWorkerThread(worker: Worker) {
+export function makeGetAsyncPacketIteratorOnWorkerThread(
+    worker: Worker,
+    progressCallback?: (progress: { totalBytes: number; encryptedBytes: number }) => void
+) {
     return async function* getAsyncPacketIteratorOnWorkerThread({
         data,
         frameSize,
@@ -36,11 +39,15 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(worker: Worker) {
             resolver(msg);
         });
 
+        let encryptedBytes = 0;
+        let totalBytes = data.byteLength;
         let chunks: Promise<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array } | null>[] = [];
         const queueNextChunk = () => {
             let chunkPromise = new Promise<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array } | null>(resolve => {
                 resolver = data => {
                     if (data !== null) {
+                        encryptedBytes += data.byteLength;
+                        progressCallback && progressCallback({ totalBytes, encryptedBytes });
                         queueNextChunk();
                     }
                     resolve(data);

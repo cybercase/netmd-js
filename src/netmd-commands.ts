@@ -100,6 +100,16 @@ export function countTracksInDisc(disc: Disc): number {
     }, 0);
 }
 
+export function getTracks(disc: Disc): Track[] {
+    let tracks: Track[] = [];
+    for (let group of disc.groups) {
+        for (let track of group.tracks) {
+            tracks.push(track);
+        }
+    }
+    return tracks;
+}
+
 export async function listContent(mdIface: NetMDInterface) {
     let flags = await mdIface.getDiscFlags();
     const title = await mdIface.getDiscTitle();

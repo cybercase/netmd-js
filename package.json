@@ -6,7 +6,16 @@
   "scripts": {
     "test": "jest",
     "build": "tsc && chmod +x dist/cli.js",
+    "dev": "tsc --watch",
     "cli": "ts-node src/cli.ts"
+  },
+  "lint-staged": {
+    "src/**/*.{ts}": "prettier --config .prettierrc --check"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
   },
   "bin": {
     "netmdcli": "./dist/cli.js"
@@ -27,7 +36,9 @@
     "@types/node": "^13.9.0",
     "@types/w3c-web-usb": "^1.0.4",
     "@types/yargs": "^15.0.4",
+    "husky": "^4.2.3",
     "jest": "^25.1.0",
+    "lint-staged": "^10.0.8",
     "prettier": "^1.19.1",
     "ts-jest": "^25.2.0",
     "ts-node": "^8.6.2",

@@ -155,7 +155,7 @@ export function pad(str: string | number, pad: string) {
     return (pad + str).slice(-pad.length);
 }
 
-export function formatTimeFromFrames(value: number) {
+export function formatTimeFromFrames(value: number, frames: boolean = true) {
     let f = value % 512;
     value = (value - f) / 512; // sec
 
@@ -167,7 +167,7 @@ export function formatTimeFromFrames(value: number) {
 
     let h = value;
 
-    return `${pad(h, '00')}:${pad(m, '00')}:${pad(s, '00')}+${pad(f, '000')}`;
+    return `${pad(h, '00')}:${pad(m, '00')}:${pad(s, '00')}` + (frames ? `+${pad(f, '000')}` : ``);
 }
 
 export function sanitizeTrackTitle(title: string) {

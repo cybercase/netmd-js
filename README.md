@@ -1,7 +1,13 @@
-# TS/JS library to access NetMD MiniDisc devices
+## JS library to access NetMD MiniDisc devices
 
-This is a port to TS of the [linux-minidisc](https://github.com/glaubitz/linux-minidisc) project.
+This is a port to TypeScript of the [linux-minidisc](https://github.com/glaubitz/linux-minidisc) project.
 
-Should work fine in node and in every browser supporting the [WebUSB](https://wicg.github.io/webusb/) standard.
+It works either in node and every browser supporting the [WebUSB](https://wicg.github.io/webusb/) standard.
 
-Sorry, no CLI available yet :)
+There's a minimal CLI called `netmdcli` that I've used for testing, but the primary purpose of this library is to serve the [Web MiniDisc](https://github.com/cybercase/webminidisc) project.
+
+### How Contribute
+Every contribute is welcome but, please, reach out to me before working on any PR.
+
+### Acknoloedgment
+This library has been made possible by the amazing work done from the [linux-minidisc](https://github.com/glaubitz/linux-minidisc) project

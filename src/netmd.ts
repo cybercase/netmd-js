@@ -61,6 +61,12 @@ export class NetMD {
         }
     }
 
+    getDeviceName() {
+        let { vendorId, productId } = this.device;
+        let deviceId = DevicesIds.find(device => device.deviceId === productId && device.vendorId === vendorId);
+        return deviceId?.name ?? 'Unknown Device';
+    }
+
     async finalize() {
         this.logger?.debug('Finalize');
         try {

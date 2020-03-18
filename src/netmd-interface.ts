@@ -452,13 +452,13 @@ export class NetMDInterface {
     async eraseTrack(track: number) {
         const query = formatQuery('1840 ff01 00 201001 %w', track);
         const reply = await this.sendQuery(query);
-        scanQuery(reply, '1840 1001 00 201001 %?%?');
+        // scanQuery(reply, '1840 0001 00 201001 %?%?');
     }
 
     async moveTrack(source: number, dest: number) {
         const query = formatQuery('1843 ff00 00 201001 00 %w 201001 %w', source, dest);
         const reply = await this.sendQuery(query);
-        scanQuery(reply, '1843 0000 00 201001 00 %?%? 201001 %?%?');
+        // scanQuery(reply, '1843 0000 00 201001 00 %?%? 201001 %?%?');
     }
 
     async _getTrackInfo(track: number, p1: number, p2: number) {
@@ -525,7 +525,7 @@ export class NetMDInterface {
     async disableNewTrackProtection(val: number) {
         const query = formatQuery('1800 080046 f0030103 2b ff %w', val);
         const reply = await this.sendQuery(query);
-        return scanQuery(reply, '1800 080046 f0030103 2b 00 %?%?');
+        scanQuery(reply, '1800 080046 f0030103 2b 00 %?%?');
     }
 
     async enterSecureSession() {
