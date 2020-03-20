@@ -13,9 +13,9 @@ npm run build
 ### How to upload music
 There's a minimal CLI called `netmdcli` that I've written for testing, but the primary purpose of this library is to serve the [Web MiniDisc](https://github.com/cybercase/webminidisc) project.
 
-If you want to upload music to your device using the cli, keep in mind that it won't parse your audio file container, but it works only with raw audio data.
+If you want to upload music to your device using the cli keep in mind that it won't parse your audio file container, but it works only with raw audio data.
 
-[ffmpeg](https://www.ffmpeg.org/) will do the trick for extracting the raw data from your audio files for *SP* uploads. If you want to use *LP2* or *LP4* you'll also need [atracdenc](https://github.com/dcherednik/atracdenc).
+[ffmpeg](https://www.ffmpeg.org/) will do the trick of extracting the raw data from your audio files for *SP* uploads. If you want to use *LP2* or *LP4* you'll also need [atracdenc](https://github.com/dcherednik/atracdenc).
 
 ##### SP
 ```
@@ -44,5 +44,5 @@ netmdcli upload rawaudiodata.raw -f sp|lp2|lp4
 ### How Contribute
 Every contribute is welcome but, please, reach out to me before opening any PR.
 
-### Acknoloedgment
+### Acknowledgments
 This library has been made possible by the amazing work done from the [linux-minidisc](https://github.com/glaubitz/linux-minidisc) project.
