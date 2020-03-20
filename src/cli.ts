@@ -93,7 +93,8 @@ async function main() {
             alias: 'v',
             type: 'boolean',
             description: 'Run with verbose logging',
-        }).argv;
+        })
+        .demandCommand().argv;
 }
 
 main().catch(err => {
