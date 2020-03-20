@@ -46,8 +46,8 @@ async function main() {
                     })
                     .option('format', {
                         alias: 'f',
-                        default: 's16be',
-                        choices: ['s16be', 'lp2', 'lp105', 'lp4'],
+                        default: 'sp',
+                        choices: ['sp', 'lp2', 'lp105', 'lp4'],
                     })
                     .option('title', {
                         alias: 't',
@@ -57,7 +57,7 @@ async function main() {
             },
             async argv => {
                 const stringToWirefromat: { [k: string]: Wireformat } = {
-                    s16be: Wireformat.pcm,
+                    sp: Wireformat.pcm,
                     lp2: Wireformat.lp2,
                     lp105: Wireformat.l105kbps,
                     lp4: Wireformat.lp4,
