@@ -5,10 +5,12 @@ export async function* getAsyncPacketIterator({
     data,
     frameSize,
     kek,
+    chunkSize,
 }: {
     data: ArrayBuffer;
     frameSize: number;
     kek: Uint8Array;
+    chunkSize: number;
 }): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
     let iv = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
     let ivWA = Crypto.lib.WordArray.create(iv) as any;
@@ -25,9 +27,9 @@ export async function* getAsyncPacketIterator({
     (keyDec as any).sigBytes = 8;
     const key = wordArrayToByteArray(keyDec);
 
-    const defaultChunkSize = 0x00100000;
+    const defaultChunkSize = chunkSize ? chunkSize : 0x00100000;
     let packetCount = 0;
-    let chunkSize = 0;
+    let currentChunkSize = 0;
 
     let uint8DataArray = new Uint8Array(data);
 
@@ -40,14 +42,14 @@ export async function* getAsyncPacketIterator({
     let offset = 0;
     while (offset < uint8DataArray.length) {
         if (packetCount > 0) {
-            chunkSize = defaultChunkSize;
+            currentChunkSize = defaultChunkSize;
         } else {
-            chunkSize = defaultChunkSize - 24;
+            currentChunkSize = defaultChunkSize - 24;
         }
 
-        chunkSize = Math.min(chunkSize, uint8DataArray.length - offset);
+        currentChunkSize = Math.min(currentChunkSize, uint8DataArray.length - offset);
 
-        const dataChunk = uint8DataArray.subarray(offset, offset + chunkSize);
+        const dataChunk = uint8DataArray.subarray(offset, offset + currentChunkSize);
         const dataChunkWA = Crypto.lib.WordArray.create(dataChunk) as any;
 
         let encryptedChunk = Crypto.DES.encrypt(dataChunkWA, rawKeyWA, {
@@ -56,7 +58,7 @@ export async function* getAsyncPacketIterator({
         });
 
         let encryptedDataChunk = wordArrayToByteArray(encryptedChunk.ciphertext);
-        encryptedDataChunk = encryptedDataChunk.subarray(0, chunkSize); //encryptedDataChunk.length - 8
+        encryptedDataChunk = encryptedDataChunk.subarray(0, currentChunkSize); //encryptedDataChunk.length - 8
 
         // Prepare Next iv before yielding the encryptedDataChunk (might be neutered after yield)
         let nextIvWA = Crypto.lib.WordArray.create(encryptedDataChunk.subarray(encryptedDataChunk.length - 8, encryptedDataChunk.length));
@@ -67,7 +69,7 @@ export async function* getAsyncPacketIterator({
         ivWA = nextIvWA;
         iv = nextiv;
 
-        offset = offset + chunkSize;
+        offset = offset + currentChunkSize;
         packetCount += 1;
     }
 }

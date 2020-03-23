@@ -747,10 +747,12 @@ export class MDTrack {
         public title: string,
         public format: Wireformat,
         public data: ArrayBuffer,
+        public chunkSize: number,
         public encryptPacketsIterator?: (params: {
             kek: Uint8Array;
             frameSize: number;
             data: ArrayBuffer;
+            chunkSize: number;
         }) => AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>
     ) {}
 
@@ -768,6 +770,10 @@ export class MDTrack {
 
     getFrameSize() {
         return FrameSize[this.format];
+    }
+
+    getChunkSize() {
+        return this.chunkSize;
     }
 
     getTotalSize() {
@@ -819,6 +825,7 @@ export class MDTrack {
             kek: this.getKEK(),
             data: this.data,
             frameSize: this.getFrameSize(),
+            chunkSize: this.chunkSize,
         });
     }
 

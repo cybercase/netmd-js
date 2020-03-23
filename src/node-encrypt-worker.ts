@@ -11,10 +11,12 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
         data,
         frameSize,
         kek,
+        chunkSize,
     }: {
         data: ArrayBuffer;
         frameSize: number;
         kek: Uint8Array;
+        chunkSize: number;
     }): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
         const w = worker;
 
@@ -25,6 +27,7 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
                     data,
                     frameSize,
                     kek,
+                    chunkSize,
                 },
                 [data]
             );
@@ -80,8 +83,8 @@ if (isMainThread) {
     parentPort!.on('message', async msg => {
         const { action, ...others } = msg;
         if (action === 'init') {
-            const { data, frameSize, kek } = others;
-            iterator = getAsyncPacketIterator({ data, frameSize, kek });
+            const { data, frameSize, kek, chunkSize } = others;
+            iterator = getAsyncPacketIterator({ data, frameSize, kek, chunkSize });
         } else if (action === 'getChunk') {
             let { value, done } = await iterator.next();
             if (done) {

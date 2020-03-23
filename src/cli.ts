@@ -75,7 +75,7 @@ async function main() {
                 const getAsyncPacketIteratorOnWorkerThread = makeGetAsyncPacketIteratorOnWorkerThread(
                     new Worker(path.join(__dirname, 'node-encrypt-worker.js'))
                 );
-                let mdTrack = new MDTrack(title, format, data.buffer, getAsyncPacketIteratorOnWorkerThread);
+                let mdTrack = new MDTrack(title, format, data.buffer, 0x100000 /* ~1Mb */, getAsyncPacketIteratorOnWorkerThread);
 
                 let netmdInterface = await openNewDevice(usb);
                 if (netmdInterface === null) {
