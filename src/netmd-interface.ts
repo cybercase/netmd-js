@@ -421,7 +421,7 @@ export class NetMDInterface {
             wcharValue = 0;
         }
         let oldLen = (await this.getDiscTitle()).length;
-        const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %s', wcharValue, title.length, oldLen, title);
+        const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %*', wcharValue, title.length, oldLen, title);
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 02201801 00%? 3000 0a00 5000 %?%? 0000 %?%?');
     }
