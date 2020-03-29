@@ -456,7 +456,7 @@ export class NetMDInterface {
     }
 
     async moveTrack(source: number, dest: number) {
-        const query = formatQuery('1843 ff00 00 201001 00 %w 201001 %w', source, dest);
+        const query = formatQuery('1843 ff00 00 201001 %w 201001 %w', source, dest);
         const reply = await this.sendQuery(query);
         // scanQuery(reply, '1843 0000 00 201001 00 %?%? 201001 %?%?');
     }
