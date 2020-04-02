@@ -1,4 +1,5 @@
 import { NetMD } from './netmd';
+import { Logger } from './logger';
 import { formatQuery, scanQuery, BCD2int, int2BCD } from './query-utils';
 import {
     concatArrayBuffers,
@@ -8,7 +9,6 @@ import {
     concatUint8Arrays,
     hexEncode,
     wordArrayToByteArray,
-    sleep,
 } from './utils';
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
@@ -112,7 +112,9 @@ class NetMDRejected extends NetMDError {
 }
 
 export class NetMDInterface {
-    constructor(public netMd: NetMD) {}
+    constructor(public netMd: NetMD, private logger?: Logger) {
+        this.logger = logger?.child({ class: 'NetMDInterface' });
+    }
 
     async sendQuery(query: ArrayBuffer, test = false) {
         await this.sendCommand(query, test);
@@ -307,7 +309,9 @@ export class NetMDInterface {
         let data = scanQuery(reply, '1806 02101001 %?%? %?%? 1000 00%?0000 %x')[0] as string;
         assert(data.length === 6, `Expected length === 6 for data`);
         assert(data.substring(0, 5) === `\x00\x10\x00\x02\x00`, `Wrong header in data response`);
-        return data.charCodeAt(5);
+        let res = data.charCodeAt(5);
+        this.logger?.debug({ method: `getTrackCount`, result: res });
+        return res;
     }
 
     async _getDiscTitle(wchar = false) {
@@ -342,7 +346,9 @@ export class NetMDInterface {
             done += chunkSize;
             remaining = total - done;
         }
-        return result.join('');
+        let res = result.join('');
+        this.logger?.debug({ method: `_getDiscTitle`, result: res });
+        return res;
     }
 
     async getDiscTitle(wchar = false) {

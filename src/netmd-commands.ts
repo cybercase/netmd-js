@@ -29,7 +29,7 @@ export async function openPairedDevice(usb: USB, logger?: Logger) {
 
     let netmd = new NetMD(devices[0], 0, logger);
     await netmd.init();
-    return new NetMDInterface(netmd);
+    return new NetMDInterface(netmd, logger);
 }
 
 export async function openNewDevice(usb: USB, logger?: Logger) {
@@ -42,7 +42,7 @@ export async function openNewDevice(usb: USB, logger?: Logger) {
     }
     let netmd = new NetMD(device, 0, logger);
     await netmd.init();
-    return new NetMDInterface(netmd);
+    return new NetMDInterface(netmd, logger);
 }
 
 export interface Device {
