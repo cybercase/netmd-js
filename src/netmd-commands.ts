@@ -144,7 +144,7 @@ export async function listContent(mdIface: NetMDInterface) {
             const duration = timeToFrames(await mdIface.getTrackLength(track));
             const flags = await mdIface.getTrackFlags(track);
             let t = {
-                index: trackIndex,
+                index: track,
                 title,
                 duration,
                 encoding: codec as Encoding,
