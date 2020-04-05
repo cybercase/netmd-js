@@ -1,4 +1,6 @@
 /* A bunch of utils. Some might be unused */
+import { Buffer } from 'buffer';
+import jconv from 'jconv';
 
 export async function sleep(msec: number) {
     await new Promise(resolve => setTimeout(resolve, msec));
@@ -46,6 +48,13 @@ export function assertString(value: unknown, message?: string): string {
         return value as string;
     }
     throw assert(false, `Expected string type - ${message}`);
+}
+
+export function assertUint8Array(value: unknown, message?: string): Uint8Array {
+    if (value instanceof Uint8Array) {
+        return value as Uint8Array;
+    }
+    throw assert(false, `Expected Uint8Array type - ${message}`);
 }
 
 export function stringToCharCodeArray(str: string) {
@@ -172,4 +181,16 @@ export function formatTimeFromFrames(value: number, frames: boolean = true) {
 
 export function sanitizeTrackTitle(title: string) {
     return encodeURIComponent(title);
+}
+
+export function encodeToSJIS(utf8String: string): Uint8Array {
+    return jconv.encode(utf8String, 'SJIS');
+}
+
+export function decodeFromSJIS(sjisBuffer: Uint8Array) {
+    return jconv.decode(new Buffer(sjisBuffer), 'SJIS');
+}
+
+export function getLengthAfterEncodingToSJIS(utf8String: string) {
+    return encodeToSJIS(utf8String).length;
 }
