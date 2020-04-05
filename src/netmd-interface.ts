@@ -9,6 +9,9 @@ import {
     concatUint8Arrays,
     hexEncode,
     wordArrayToByteArray,
+    getLengthAfterEncodingToSJIS,
+    encodeToSJIS,
+    decodeFromSJIS,
 } from './utils';
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
@@ -162,7 +165,8 @@ export class NetMDInterface {
     async getStatus() {
         const query = formatQuery('1809 8001 0230 8800 0030 8804 00 ff00 00000000');
         const reply = await this.sendQuery(query);
-        return scanQuery(reply, '1809 8001 0230 8800 0030 8804 00 1000 000900000 %x')[0] as string;
+        let res = scanQuery(reply, '1809 8001 0230 8800 0030 8804 00 1000 000900000 %x');
+        return String.fromCharCode(...(res[0] as Uint8Array));
     }
 
     async isDiscPresent() {
@@ -180,7 +184,8 @@ export class NetMDInterface {
     async _getPlaybackStatus(p1: number, p2: number) {
         const query = formatQuery('1809 8001 0330 %w 0030 8805 0030 %w 00 ff00 00000000', p1, p2);
         const reply = await this.sendQuery(query);
-        return scanQuery(reply, '1809 8001 0330 %?%? %?%? %?%? %?%? %?%? %? 1000 00%?0000 %x')[0] as string;
+        let res = scanQuery(reply, '1809 8001 0330 %?%? %?%? %?%? %?%? %?%? %? 1000 00%?0000 %x');
+        return String.fromCharCode(...(res[0] as Uint8Array));
     }
 
     async getPlaybackStatus1() {
@@ -306,12 +311,13 @@ export class NetMDInterface {
     async getTrackCount() {
         const query = formatQuery('1806 02101001 3000 1000 ff00 00000000');
         const reply = await this.sendQuery(query);
-        let data = scanQuery(reply, '1806 02101001 %?%? %?%? 1000 00%?0000 %x')[0] as string;
+        let res1 = scanQuery(reply, '1806 02101001 %?%? %?%? 1000 00%?0000 %x');
+        let data = String.fromCharCode(...(res1[0] as Uint8Array));
         assert(data.length === 6, `Expected length === 6 for data`);
         assert(data.substring(0, 5) === `\x00\x10\x00\x02\x00`, `Wrong header in data response`);
-        let res = data.charCodeAt(5);
-        this.logger?.debug({ method: `getTrackCount`, result: res });
-        return res;
+        let res2 = data.charCodeAt(5);
+        this.logger?.debug({ method: `getTrackCount`, result: res2 });
+        return res2;
     }
 
     async _getDiscTitle(wchar = false) {
@@ -334,14 +340,13 @@ export class NetMDInterface {
                 let res = scanQuery(reply, '1806 02201801 00%? 3000 0a00 1000 %w0000 %?%?000a %w %*');
                 chunkSize = JSBI.toNumber(res[0] as JSBI);
                 total = JSBI.toNumber(res[1] as JSBI);
-                chunk = res[2] as string;
+                chunk = decodeFromSJIS(res[2] as Uint8Array);
                 chunkSize -= 6;
             } else {
                 let res = scanQuery(reply, '1806 02201801 00%? 3000 0a00 1000 %w%?%? %*');
                 chunkSize = JSBI.toNumber(res[0] as JSBI);
-                chunk = res[1] as string;
+                chunk = decodeFromSJIS(res[1] as Uint8Array);
             }
-            assert(chunkSize === chunk.length);
             result.push(chunk);
             done += chunkSize;
             remaining = total - done;
@@ -416,18 +421,19 @@ export class NetMDInterface {
         const query = formatQuery('1806 022018%b %w 3000 0a00 ff00 00000000', wcharValue, track);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1806 022018%? %?%? %?%? %?%? 1000 00%?0000 00%?000a %x');
-        return res[0] as string;
+        return decodeFromSJIS(res[0] as Uint8Array);
     }
 
     async setDiscTitle(title: string, wchar = false) {
         let wcharValue;
+        let oldLen = getLengthAfterEncodingToSJIS(await this.getDiscTitle());
+        let newLength = getLengthAfterEncodingToSJIS(title);
         if (wchar) {
             wcharValue = 1;
         } else {
             wcharValue = 0;
         }
-        let oldLen = (await this.getDiscTitle()).length;
-        const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %*', wcharValue, title.length, oldLen, title);
+        const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %*', wcharValue, newLength, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 02201801 00%? 3000 0a00 5000 %?%? 0000 %?%?');
     }
@@ -441,8 +447,9 @@ export class NetMDInterface {
         }
 
         let oldLen: number;
+        let newLen: number = getLengthAfterEncodingToSJIS(title);
         try {
-            oldLen = (await this.getTrackTitle(track)).length;
+            oldLen = getLengthAfterEncodingToSJIS(await this.getTrackTitle(track));
         } catch (err) {
             if (err instanceof NetMDRejected) {
                 oldLen = 0;
@@ -450,7 +457,7 @@ export class NetMDInterface {
                 throw err;
             }
         }
-        const query = formatQuery('1807 022018%b %w 3000 0a00 5000 %w 0000 %w %*', wcharValue, track, title.length, oldLen, title);
+        const query = formatQuery('1807 022018%b %w 3000 0a00 5000 %w 0000 %w %*', wcharValue, track, newLen, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 022018%? %?%? 3000 0a00 5000 %?%? 0000 %?%?');
     }
@@ -470,7 +477,8 @@ export class NetMDInterface {
     async _getTrackInfo(track: number, p1: number, p2: number) {
         const query = formatQuery('1806 02201001 %w %w %w ff00 00000000', track, p1, p2);
         const reply = await this.sendQuery(query);
-        return scanQuery(reply, '1806 02201001 %?%? %?%? %?%? 1000 00%?0000 %x')[0] as string;
+        let res = scanQuery(reply, '1806 02201001 %?%? %?%? %?%? 1000 00%?0000 %x');
+        return String.fromCharCode(...(res[0] as Uint8Array));
     }
 
     async getTrackLength(track: number) {
@@ -549,7 +557,8 @@ export class NetMDInterface {
     async getLeafID() {
         const query = formatQuery('1800 080046 f0030103 11 ff');
         const reply = await this.sendQuery(query);
-        return scanQuery(reply, '1800 080046 f0030103 11 00 %*')[0] as string;
+        let res = scanQuery(reply, '1800 080046 f0030103 11 00 %*');
+        return String.fromCharCode(...(res[0] as Uint8Array));
     }
 
     async sendKeyData(ekbid: JSBI, keychain: Uint8Array[], depth: number, ekbsignature: Uint8Array) {
@@ -676,10 +685,14 @@ export class NetMDInterface {
 
         const res = scanQuery(reply, '1800 080046 f0030103 28 00 000100 1001 %w 00 %?%? %?%?%?%? %?%?%?%? %*');
 
-        const replydata = Crypto.DES.decrypt(Crypto.enc.Hex.parse(hexEncode(res[1] as string)), Crypto.enc.Hex.parse(hexSessionKey), {
-            mode: Crypto.mode.CBC,
-            iv: Crypto.enc.Hex.parse('0000000000000000'),
-        }).toString(Crypto.enc.Utf8);
+        const replydata = Crypto.DES.decrypt(
+            Crypto.lib.WordArray.create(res[1] as Uint8Array) as any,
+            Crypto.enc.Hex.parse(hexSessionKey),
+            {
+                mode: Crypto.mode.CBC,
+                iv: Crypto.enc.Hex.parse('0000000000000000'),
+            }
+        ).toString(Crypto.enc.Utf8);
 
         return [JSBI.toNumber(res[0] as JSBI), replydata.substring(0, 8), replydata.substring(12, 32)] as [number, string, string];
     }
@@ -687,7 +700,8 @@ export class NetMDInterface {
     async getTrackUUID(track: number) {
         const query = formatQuery('1800 080046 f0030103 23 ff 1001 %w', track);
         const reply = await this.sendQuery(query);
-        return scanQuery(reply, '1800 080046 f0030103 23 00 1001 %?%? %*')[0] as string;
+        let res = scanQuery(reply, '1800 080046 f0030103 23 00 1001 %?%? %*');
+        return String.fromCharCode(...(res[0] as Uint8Array));
     }
 }
 

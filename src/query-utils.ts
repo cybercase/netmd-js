@@ -1,4 +1,4 @@
-import { assert, assertString, assertNumber, stringToCharCodeArray, assertBigInt } from './utils';
+import { assert, assertUint8Array } from './utils';
 import JSBI from 'jsbi';
 
 // prettier-ignore
@@ -27,21 +27,19 @@ export function formatQuery(format: string, ...args: unknown[]): ArrayBuffer {
                     result.push(JSBI.toNumber(v));
                 }
             } else if (char === 'x' || char === 's') {
-                let stringValue = assertString(value);
-                let stringLength = stringValue.length;
+                let uint8ArrayValue = assertUint8Array(value);
+                let bufferLength = uint8ArrayValue.byteLength;
                 if (char === 's') {
-                    stringLength += 1;
+                    bufferLength += 1;
                 }
-                result.push((stringLength >> 8) & 0xff);
-                result.push(stringLength & 0xff);
-                result.push(...stringToCharCodeArray(stringValue));
+                result.push((bufferLength >> 8) & 0xff);
+                result.push(bufferLength & 0xff);
+                result.push(...uint8ArrayValue);
                 if (char === 's') {
                     result.push(0);
                 }
             } else if (char === '*') {
-                if (typeof value === 'string') {
-                    result.push(...stringToCharCodeArray(value));
-                } else if (value instanceof Uint8Array) {
+                if (value instanceof Uint8Array) {
                     result.push(...value);
                 } else {
                     assert(false, `Unexpected type for value`);
@@ -99,16 +97,17 @@ export function scanQuery(query: ArrayBuffer | number[], format: string) {
             } else if (char === 's' || char === 'x') {
                 let length = (inputStack.shift()! << 8) | inputStack.shift()!;
                 let newInputStack = inputStack.splice(length);
-                let value = String.fromCharCode(...inputStack);
+                let buffer = new Uint8Array(inputStack);
                 inputStack = newInputStack;
                 if (char === 's') {
-                    result.push(value.substring(0, value.length - 1));
+                    result.push(buffer);
+                    // result.push(value.substring(0, value.length - 1));
                 } else {
-                    result.push(value);
+                    result.push(buffer);
                 }
             } else if (char === '*') {
-                let value = String.fromCharCode(...inputStack.splice(0));
-                result.push(value);
+                let buffer = new Uint8Array(inputStack.splice(0));
+                result.push(buffer);
             } else if (char === '#') {
                 let value = new Uint8Array(inputStack.splice(0));
                 result.push(value);
