@@ -56,8 +56,10 @@
   },
   "dependencies": {
     "browser-bunyan": "^1.5.3",
+    "buffer": "^5.5.0",
     "bunyan": "^1.8.12",
     "crypto-js": "^4.0.0",
+    "jconv": "^0.1.5",
     "jsbi": "^3.1.1",
     "webusb": "^2.0.1",
     "yargs": "^15.1.0"
