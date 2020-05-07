@@ -379,7 +379,7 @@ export class NetMDInterface {
             if (group === '') {
                 continue;
             }
-            if (group.startsWith('0;') || group.indexOf(';') === -1) {
+            if (group.startsWith('0;') || group.indexOf(';') === -1 || rawTitle.indexOf('//') === -1) {
                 continue;
             }
             const [trackRange] = group.split(';', 1);
