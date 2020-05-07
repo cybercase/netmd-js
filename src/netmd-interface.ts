@@ -379,10 +379,11 @@ export class NetMDInterface {
             if (group === '') {
                 continue;
             }
-            if (group[0] === '0' || group.indexOf(';') === -1) {
+            if (group.startsWith('0;') || group.indexOf(';') === -1) {
                 continue;
             }
-            const [trackRange, groupName] = group.split(';', 2);
+            const [trackRange] = group.split(';', 1);
+            const groupName = group.substring(trackRange.length + 1);
             let trackMinStr: string, trackMaxStr: string;
             if (trackRange.indexOf('-') >= 0) {
                 [trackMinStr, trackMaxStr] = trackRange.split('-');
@@ -406,7 +407,7 @@ export class NetMDInterface {
         }
         let trackList = [...Array(trackCount).keys()].filter(x => !(x in trackDict));
         if (trackList.length > 0) {
-            result.push([null, trackList]);
+            result.unshift([null, trackList]);
         }
         return result;
     }
