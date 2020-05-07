@@ -5,7 +5,7 @@ import { NetMDInterface, Encoding, Channels, TrackFlag, DiscFlag, MDTrack, MDSes
 import { timeToFrames } from './utils';
 import { Logger } from './logger';
 
-const EncodingName: { [k: number]: string } = {
+export const EncodingName: { [k: number]: string } = {
     [Encoding.sp]: 'sp',
     [Encoding.lp2]: 'lp2',
     [Encoding.lp4]: 'lp4',
@@ -16,7 +16,7 @@ const ChannelCount: { [k: number]: string } = {
     [Channels.stereo]: 'stereo',
 };
 
-const Flag: { [k: number]: string } = {
+export const Flag: { [k: number]: string } = {
     [TrackFlag.protected]: 'protected',
     [TrackFlag.unprotected]: 'unprotected',
 };

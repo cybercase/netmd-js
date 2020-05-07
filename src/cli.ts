@@ -4,7 +4,7 @@ import path from 'path';
 
 import yargs from 'yargs';
 import { usb } from 'webusb';
-import { download, listDevice, listContent, openNewDevice, Disc, countTracksInDisc, Device } from './netmd-commands';
+import { download, listDevice, listContent, openNewDevice, Disc, countTracksInDisc, Device, EncodingName, Flag } from './netmd-commands';
 import { MDTrack, Wireformat } from './netmd-interface';
 import { pad, formatTimeFromFrames, sanitizeTrackTitle } from './utils';
 import { makeGetAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker';
@@ -112,8 +112,9 @@ function printDisc(disc: Disc) {
         (disc.writable ? `(writable media) ` : ``) +
         (disc.writeProtected ? `(write protected)` : ``)
     );
+    console.log(`Title: ` + disc.title);
 
-    console.log(`Time used ${formatTimeFromFrames(disc.used)}`);
+    console.log(`Time used: ${formatTimeFromFrames(disc.used)}`);
 
     console.log(`${countTracksInDisc(disc)} tracks`);
 
@@ -123,7 +124,9 @@ function printDisc(disc: Disc) {
         }
         for (let t of g.tracks) {
             console.log(
-                `${g.title !== null ? '  ' : ''}${pad(t.index, '000')}: ${formatTimeFromFrames(t.duration)} - ${t.encoding} ${t.title}`
+                `${g.title !== null ? '  ' : ''}${pad(t.index, '000')}: ${formatTimeFromFrames(t.duration)} - ${Flag[t.protected]} ${
+                    EncodingName[t.encoding]
+                } - ${t.title}`
             );
         }
     }
