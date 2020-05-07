@@ -188,7 +188,7 @@ export function encodeToSJIS(utf8String: string): Uint8Array {
 }
 
 export function decodeFromSJIS(sjisBuffer: Uint8Array) {
-    return jconv.decode(new Buffer(sjisBuffer), 'SJIS');
+    return jconv.decode(Buffer.from(sjisBuffer), 'SJIS');
 }
 
 export function getLengthAfterEncodingToSJIS(utf8String: string) {
