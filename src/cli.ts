@@ -36,6 +36,27 @@ async function main() {
             }
         )
         .command(
+            'set_raw_title [raw_title]',
+            'set disc title and group info',
+            yargs => {
+                return yargs
+                    .positional('raw_title', {
+                        describe: 'new raw_title to set',
+                        type: 'string',
+                    })
+                    .demandOption(['raw_title']);
+            },
+            async argv => {
+                let netmdInterface = await openNewDevice(usb);
+                if (netmdInterface === null) {
+                    printNotDeviceFound();
+                    return;
+                }
+
+                await netmdInterface.setDiscTitle(argv.raw_title, false);
+            }
+        )
+        .command(
             'upload [inputfile]',
             'upload music to your device',
             yargs => {
