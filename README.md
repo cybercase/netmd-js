@@ -4,6 +4,11 @@ This is a port to TypeScript of the [linux-minidisc](https://github.com/glaubitz
 
 It works either in node and every browser supporting the [WebUSB](https://wicg.github.io/webusb/) standard.
 
+### How to Install CLI (netmdcli)
+```
+npm install netmd-js -g
+```
+
 ### How to build
 ```
 npm install
