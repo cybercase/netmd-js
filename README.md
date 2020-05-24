@@ -24,14 +24,14 @@ ffmpeg -i youraudiofile -f s16be rawaudiodata.raw  # outputs raw audio data suit
 
 ##### LP2
 ```
-ffmpeg -i youraudiofile youraudiofile.wav # 44100 16bit wav input file suitable for atracdenc
+ffmpeg -i youraudiofile -ar 44100 youraudiofile.wav # 44100 16bit wav input file suitable for atracdenc
 atracdenc -e atrac3 -i youraudiofile.wav -o youraudiofile.oma --bitrate 128
 dd bs=96 skip=1 if=youraudiofile.oma of=rawaudiodata.raw # removes OMA file header
 ```
 
 ##### LP4
 ```
-ffmpeg -i youraudiofile youraudiofile.wav # 44100 16bit wav input file suitable for atracdenc
+ffmpeg -i youraudiofile -ar 44100 youraudiofile.wav # 44100 16bit wav input file suitable for atracdenc
 atracdenc -e atrac3 -i youraudiofile.wav -o youraudiofile.oma --bitrate 64
 dd bs=96 skip=1 if=youraudiofile.oma of=rawaudiodata.raw # removes OMA file header
 ```
