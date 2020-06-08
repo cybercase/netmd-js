@@ -4,7 +4,18 @@ import path from 'path';
 
 import yargs from 'yargs';
 import { usb } from 'webusb';
-import { download, listDevice, listContent, openNewDevice, Disc, countTracksInDisc, Device, EncodingName, Flag } from './netmd-commands';
+import {
+    download,
+    listDevice,
+    listContent,
+    openNewDevice,
+    Disc,
+    countTracksInDisc,
+    Device,
+    EncodingName,
+    Flag,
+    ChannelName,
+} from './netmd-commands';
 import { MDTrack, Wireformat } from './netmd-interface';
 import { pad, formatTimeFromFrames, sanitizeTrackTitle } from './utils';
 import { makeGetAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker';
@@ -147,7 +158,7 @@ function printDisc(disc: Disc) {
             console.log(
                 `${g.title !== null ? '  ' : ''}${pad(t.index, '000')}: ${formatTimeFromFrames(t.duration)} - ${Flag[t.protected]} ${
                     EncodingName[t.encoding]
-                } - ${t.title}`
+                } ${ChannelName[t.channel]} - ${t.title}`
             );
         }
     }

@@ -11,7 +11,7 @@ export const EncodingName: { [k: number]: string } = {
     [Encoding.lp4]: 'lp4',
 };
 
-const ChannelCount: { [k: number]: string } = {
+export const ChannelName: { [k: number]: string } = {
     [Channels.mono]: 'mono',
     [Channels.stereo]: 'stereo',
 };
@@ -73,6 +73,7 @@ export interface Track {
     index: number;
     title: string | null;
     duration: number;
+    channel: number;
     encoding: Encoding;
     protected: TrackFlag;
 }
@@ -140,13 +141,14 @@ export async function listContent(mdIface: NetMDInterface) {
         let tracks: Track[] = [];
         for (let [trackIndex, track] of trackLists.entries()) {
             const title = await mdIface.getTrackTitle(track);
-            const [codec, channelCount] = await mdIface.getTrackEncoding(track);
+            const [codec, channel] = await mdIface.getTrackEncoding(track);
             const duration = timeToFrames(await mdIface.getTrackLength(track));
             const flags = await mdIface.getTrackFlags(track);
             let t = {
                 index: track,
                 title,
                 duration,
+                channel: channel,
                 encoding: codec as Encoding,
                 protected: flags as TrackFlag,
             };
