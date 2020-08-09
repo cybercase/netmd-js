@@ -121,6 +121,34 @@ async function main() {
                 console.log('Time:', stop - start);
             }
         )
+        .command(
+            'rename [track_number] [title]',
+            'set track title. Track indexes start from 0',
+            yargs => {
+                return yargs
+                    .positional('title', {
+                        describe: 'new title for track',
+                        type: 'string',
+                        demandOption: true,
+                    })
+                    .positional('track_number', {
+                        describe: 'track index',
+                        type: 'number',
+                        demandOption: true,
+                    });
+            },
+            async argv => {
+                let netmdInterface = await openNewDevice(usb);
+                if (netmdInterface === null) {
+                    printNotDeviceFound();
+                    return;
+                }
+
+                await netmdInterface.cacheTOC();
+                await netmdInterface.setTrackTitle(argv.track_number, argv.title);
+                await netmdInterface.syncTOC();
+            }
+        )
         .option('verbose', {
             alias: 'v',
             type: 'boolean',
