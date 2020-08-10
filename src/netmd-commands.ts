@@ -170,13 +170,19 @@ export async function download(
         // Ignore. Assume there wasn't anything to finalize
     }
 
-    await mdIface.disableNewTrackProtection(1);
+    await mdIface.acquire();
+    try {
+        await mdIface.disableNewTrackProtection(1);
+    } catch (err) {
+        // Ignore. On Sharp devices this doesn't work anyway.
+    }
 
     const session = new MDSession(mdIface, new EKBOpenSource());
     await session.init();
     const [trk, uuid, ccid] = await session.downloadTrack(track, progressCallback);
 
     await session.close();
+    await mdIface.release();
 
     return [trk, uuid, ccid];
 }
