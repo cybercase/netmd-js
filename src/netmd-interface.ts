@@ -620,6 +620,7 @@ export class NetMDInterface {
         let message = concatUint8Arrays(new Uint8Array([1, 1, 1, 1]), contentid, keyenckey);
         const encryptedarg = Crypto.DES.encrypt(Crypto.lib.WordArray.create(message), Crypto.enc.Hex.parse(hexSessionKey), {
             mode: Crypto.mode.CBC,
+            padding: Crypto.pad.NoPadding,
             iv: Crypto.enc.Hex.parse('0000000000000000'),
         });
 
@@ -635,6 +636,7 @@ export class NetMDInterface {
         }
         const authentication = Crypto.DES.encrypt(Crypto.enc.Hex.parse('0000000000000000'), Crypto.enc.Hex.parse(hexSessionKey), {
             mode: Crypto.mode.ECB,
+            padding: Crypto.pad.NoPadding,
         });
         const query = formatQuery('1800 080046 f0030103 48 ff 00 1001 %w %*', tracknum, wordArrayToByteArray(authentication.ciphertext));
         const reply = await this.sendQuery(query);
