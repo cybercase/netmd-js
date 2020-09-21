@@ -7,6 +7,7 @@ import { usb } from 'webusb';
 import {
     download,
     listDevice,
+    getDeviceStatus,
     listContent,
     openNewDevice,
     Disc,
@@ -17,11 +18,21 @@ import {
     ChannelName,
 } from './netmd-commands';
 import { MDTrack, Wireformat } from './netmd-interface';
-import { pad, formatTimeFromFrames, sanitizeTrackTitle } from './utils';
+import { pad, formatTimeFromFrames, sanitizeTrackTitle, sleep } from './utils';
 import { makeGetAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker';
 import { Worker } from 'worker_threads';
+import readline from 'readline';
 
 async function main() {
+    async function openDeviceOrExit(usb: USB) {
+        let netmdInterface = await openNewDevice(usb);
+        if (netmdInterface === null) {
+            printNotDeviceFound();
+            process.exit(1);
+        }
+        return netmdInterface;
+    }
+
     const args = yargs
         .command(
             'devices',
@@ -30,6 +41,91 @@ async function main() {
             async argv => {
                 let device = await listDevice(usb);
                 printDevice(device);
+            }
+        )
+        .command(
+            'status [readIntervalMS]',
+            'show device status',
+            yargs => {
+                return yargs.option('readIntervalMS', {
+                    alias: 'i',
+                    default: 0,
+                    type: 'number',
+                });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                if (argv.readIntervalMS > 0) {
+                    readline.emitKeypressEvents(process.stdin);
+                    process.stdin.setRawMode(true);
+                    process.stdin.on('keypress', async (str, key) => {
+                        try {
+                            switch (key.name) {
+                                case 'q':
+                                    process.exit(0);
+                                    break;
+                                case 'right':
+                                    await netmdInterface.nextTrack();
+                                    break;
+                                case 'left':
+                                    await netmdInterface.previousTrack();
+                                    break;
+                                case 'up':
+                                    await netmdInterface.fast_forward();
+                                    break;
+                                case 'down':
+                                    await netmdInterface.rewind();
+                                    break;
+                                case 'space':
+                                    await netmdInterface.play();
+                                    break;
+                                case 'return':
+                                    await netmdInterface.stop();
+                                    break;
+                                default:
+                                    break;
+                            }
+                        } catch (e) {
+                            console.log('Failed', e.stack);
+                        }
+                    });
+                }
+
+                do {
+                    const status = await getDeviceStatus(netmdInterface);
+                    console.log(status);
+                    await sleep(argv.readIntervalMS);
+                } while (argv.readIntervalMS > 0);
+            }
+        )
+        .command(
+            'command [command]',
+            'send command to device',
+            yargs => {
+                return yargs.positional('command', {
+                    alias: 'c',
+                    choices: ['play', 'stop', 'next', 'prev'],
+                });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                const command = argv.command;
+                switch (command) {
+                    case 'play':
+                        await netmdInterface.play();
+                        break;
+                    case 'stop':
+                        await netmdInterface.stop();
+                        break;
+                    case 'next':
+                        await netmdInterface.nextTrack();
+                        break;
+                    case 'prev':
+                        await netmdInterface.previousTrack();
+                        break;
+                    default:
+                        throw new Error(`Unexpected command ${command}`);
+                }
             }
         )
         .command(
