@@ -7,7 +7,6 @@ import {
     assert,
     isBigEndian,
     concatUint8Arrays,
-    hexEncode,
     wordArrayToByteArray,
     getLengthAfterEncodingToSJIS,
     encodeToSJIS,
