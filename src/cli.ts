@@ -133,11 +133,7 @@ async function main() {
             'list device content',
             yargs => {},
             async argv => {
-                let netmdInterface = await openNewDevice(usb);
-                if (netmdInterface === null) {
-                    printNotDeviceFound();
-                    return;
-                }
+                let netmdInterface = await openDeviceOrExit(usb);
                 let content = await listContent(netmdInterface);
                 printDisc(content);
             }
@@ -154,12 +150,7 @@ async function main() {
                     .demandOption(['raw_title']);
             },
             async argv => {
-                let netmdInterface = await openNewDevice(usb);
-                if (netmdInterface === null) {
-                    printNotDeviceFound();
-                    return;
-                }
-
+                let netmdInterface = await openDeviceOrExit(usb);
                 await netmdInterface.setDiscTitle(argv.raw_title, false);
             }
         )
@@ -184,6 +175,8 @@ async function main() {
                     .demandOption(['inputfile']);
             },
             async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+
                 const stringToWirefromat: { [k: string]: Wireformat } = {
                     sp: Wireformat.pcm,
                     lp2: Wireformat.lp2,
@@ -204,12 +197,6 @@ async function main() {
                     new Worker(path.join(__dirname, 'node-encrypt-worker.js'))
                 );
                 let mdTrack = new MDTrack(title, format, data.buffer, 0x100000 /* ~1Mb */, getAsyncPacketIteratorOnWorkerThread);
-
-                let netmdInterface = await openNewDevice(usb);
-                if (netmdInterface === null) {
-                    printNotDeviceFound();
-                    return;
-                }
 
                 let start = Date.now();
                 await download(netmdInterface, mdTrack, progressCallback);
@@ -234,12 +221,7 @@ async function main() {
                     });
             },
             async argv => {
-                let netmdInterface = await openNewDevice(usb);
-                if (netmdInterface === null) {
-                    printNotDeviceFound();
-                    return;
-                }
-
+                let netmdInterface = await openDeviceOrExit(usb);
                 await netmdInterface.cacheTOC();
                 await netmdInterface.setTrackTitle(argv.track_number, argv.title);
                 await netmdInterface.syncTOC();
