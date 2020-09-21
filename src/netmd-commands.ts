@@ -95,6 +95,51 @@ export interface Disc {
     groups: Group[];
 }
 
+const OperatingStatus = {
+    50687: 'ready',
+    50037: 'playing',
+    49983: 'fastForward',
+    49999: 'rewind',
+    65315: 'readingTOC',
+} as const;
+type OperatingStatusType = typeof OperatingStatus[keyof typeof OperatingStatus] | 'unknown';
+
+export interface DeviceStatus {
+    discPresent: boolean;
+    time: { minute: number; second: number; frame: number } | null;
+    track: number | null;
+    state: OperatingStatusType;
+}
+
+export async function getDeviceStatus(mdIface: NetMDInterface): Promise<DeviceStatus> {
+    const status = await mdIface.getStatus();
+    const operatingStatus = await mdIface.getOperatingStatus();
+    const position = await mdIface.getPosition();
+
+    const track = position ? position[0] : null;
+    const discPresent = status[4] === 0x40;
+    let state: OperatingStatusType =
+        operatingStatus in OperatingStatus ? OperatingStatus[operatingStatus as keyof typeof OperatingStatus] : 'unknown';
+    if (state === 'playing' && !discPresent) {
+        state = 'ready';
+    }
+
+    const time = position
+        ? {
+              minute: position[2],
+              second: position[3],
+              frame: position[4],
+          }
+        : null;
+
+    return {
+        discPresent,
+        state,
+        track,
+        time,
+    };
+}
+
 export function countTracksInDisc(disc: Disc): number {
     return disc.groups.reduce((acc, g, _) => {
         return acc + g.tracks.length;
