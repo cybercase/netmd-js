@@ -164,13 +164,13 @@ export class NetMDInterface {
     async getStatus() {
         const query = formatQuery('1809 8001 0230 8800 0030 8804 00 ff00 00000000');
         const reply = await this.sendQuery(query);
-        let res = scanQuery(reply, '1809 8001 0230 8800 0030 8804 00 1000 000900000 %x');
-        return String.fromCharCode(...(res[0] as Uint8Array));
+        let res = scanQuery(reply, '1809 8001 0230 8800 0030 8804 00 1000 00090000 %x');
+        return res[0] as Uint8Array;
     }
 
     async isDiscPresent() {
         const status = await this.getStatus();
-        return status.charCodeAt(4) === 0x40;
+        return status[4] === 0x40;
     }
 
     async getOperatingStatus() {
@@ -184,7 +184,7 @@ export class NetMDInterface {
         const query = formatQuery('1809 8001 0330 %w 0030 8805 0030 %w 00 ff00 00000000', p1, p2);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0330 %?%? %?%? %?%? %?%? %?%? %? 1000 00%?0000 %x');
-        return String.fromCharCode(...(res[0] as Uint8Array));
+        return res[0] as Uint8Array;
     }
 
     async getPlaybackStatus1() {
