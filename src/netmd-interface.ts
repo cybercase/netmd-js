@@ -389,10 +389,10 @@ export class NetMDInterface {
             } else {
                 trackMinStr = trackMaxStr = trackRange;
             }
-            const [trackMin, trackMax] = [Number.parseInt(trackMinStr, 10), Number.parseInt(trackMaxStr, 10)];
+            let [trackMin, trackMax] = [Number.parseInt(trackMinStr, 10), Number.parseInt(trackMaxStr, 10)];
+            trackMax = Math.min(trackMax, trackCount); // Groups might not updated when a song is deleted
             assert(0 <= trackMin);
             assert(trackMin <= trackMax);
-            assert(trackMax <= trackCount);
 
             let trackList: number[] = [];
             for (let track = trackMin - 1; track < trackMax; track++) {
