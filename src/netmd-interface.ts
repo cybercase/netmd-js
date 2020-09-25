@@ -174,6 +174,7 @@ export class NetMDInterface {
     }
 
     async getOperatingStatus() {
+        // WARNING: Does not work for all devices. See https://github.com/cybercase/webminidisc/issues/21
         const query = formatQuery('1809 8001 0330 8802 0030 8805 0030 8806 00 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0330 8802 0030 8805 0030 8806 00 1000 00%?0000 0006 8806 0002 %w')[0] as JSBI;

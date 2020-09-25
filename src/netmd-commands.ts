@@ -113,7 +113,9 @@ export interface DeviceStatus {
 
 export async function getDeviceStatus(mdIface: NetMDInterface): Promise<DeviceStatus> {
     const status = await mdIface.getStatus();
-    const operatingStatus = await mdIface.getOperatingStatus();
+    const playbackStatus2 = await mdIface.getPlaybackStatus2();
+    const [b1, b2] = [playbackStatus2[4], playbackStatus2[5]];
+    const operatingStatus = (b1 << 8) | b2;
     const position = await mdIface.getPosition();
 
     const track = position ? position[0] : null;
