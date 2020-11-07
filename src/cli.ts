@@ -56,6 +56,7 @@ async function main() {
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
                 if (argv.readIntervalMS > 0) {
+                    console.log('press Q to exit. Look at cli.js for other commands\n');
                     readline.emitKeypressEvents(process.stdin);
                     process.stdin.setRawMode(true);
                     process.stdin.on('keypress', async (str, key) => {
