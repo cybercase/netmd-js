@@ -11,6 +11,7 @@ import {
     getLengthAfterEncodingToSJIS,
     encodeToSJIS,
     decodeFromSJIS,
+    sleep,
 } from './utils';
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
@@ -114,6 +115,8 @@ class NetMDRejected extends NetMDError {
 }
 
 export class NetMDInterface {
+    static maxInterimReadAttempts = 3;
+    static interimResponseRetryIntervalInMs = 100;
     constructor(public netMd: NetMD, private logger?: Logger) {
         this.logger = logger?.child({ class: 'NetMDInterface' });
     }
@@ -134,19 +137,33 @@ export class NetMDInterface {
     }
 
     async readReply() {
-        let { data } = await this.netMd.readReply();
-        if (data === undefined) {
-            throw new Error('unexpected undefined value in readReply');
+        let currentAttempt = 0;
+        let data: DataView | undefined;
+        while (currentAttempt < NetMDInterface.maxInterimReadAttempts) {
+            ({ data } = await this.netMd.readReply());
+            if (data === undefined) {
+                throw new Error('unexpected undefined value in readReply');
+            }
+
+            let status = data.getUint8(0);
+            if (status === Status.notImplemented) {
+                throw new NetMDNotImplemented('Not implemented');
+            } else if (status === Status.rejected) {
+                throw new NetMDRejected('Rejected');
+            } else if ([Status.accepted, Status.implemented].indexOf(status) < -1) {
+                throw new NetMDNotImplemented(`Unknown return status: ${status}`);
+            } else if (status === Status.interim) {
+                await sleep(NetMDInterface.interimResponseRetryIntervalInMs * (Math.pow(2, currentAttempt) - 1));
+                currentAttempt += 1;
+                continue; // Retry
+            } else {
+                break; // Success!
+            }
         }
-        let status = data.getUint8(0);
-        if (status === Status.notImplemented) {
-            throw new NetMDNotImplemented('Not implemented');
-        } else if (status === Status.rejected) {
-            throw new NetMDRejected('Rejected');
-        } else if ([Status.accepted, Status.implemented, Status.interim].indexOf(status) < -1) {
-            throw new NetMDNotImplemented(`Unknown return status: ${status}`);
+        if (currentAttempt >= NetMDInterface.maxInterimReadAttempts) {
+            throw new NetMDRejected('Max attempts read attempts for interim status reached');
         }
-        return data.buffer.slice(1);
+        return data!.buffer.slice(1);
     }
 
     async acquire() {
