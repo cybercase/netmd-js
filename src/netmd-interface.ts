@@ -136,9 +136,9 @@ export class NetMDInterface {
         this.netMd.sendCommand(concatArrayBuffers(statusByte, query));
     }
 
-    async sendHandshake(h1: number, h2: number) {
-        const handshake = formatQuery('1808 10 %w %w', h1, h2);
-        await this.sendQuery(handshake);
+    async sendHandshake(handshake: string) {
+        const hs = formatQuery(handshake);
+        await this.sendQuery(hs);
     }
 
     async readReply() {
@@ -184,6 +184,7 @@ export class NetMDInterface {
     }
 
     async getStatus() {
+        await this.sendHandshake('1808 8000 0100');
         const query = formatQuery('1809 8001 0230 8800 0030 8804 00 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0230 8800 0030 8804 00 1000 00090000 %x');
@@ -197,6 +198,7 @@ export class NetMDInterface {
 
     async getOperatingStatus() {
         // WARNING: Does not work for all devices. See https://github.com/cybercase/webminidisc/issues/21
+        await this.sendHandshake('1808 8000 0100');
         const query = formatQuery('1809 8001 0330 8802 0030 8805 0030 8806 00 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0330 8802 0030 8805 0030 8806 00 1000 00%?0000 0006 8806 0002 %w')[0] as JSBI;
@@ -312,6 +314,7 @@ export class NetMDInterface {
     }
 
     async syncTOC() {
+        await this.sendHandshake('180810 1801 0000');
         const query = formatQuery('1808 10180200 00');
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1808 10180200 00');
@@ -331,6 +334,7 @@ export class NetMDInterface {
     }
 
     async getTrackCount() {
+        await this.sendHandshake('180810 1001 0100');
         const query = formatQuery('1806 02101001 3000 1000 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res1 = scanQuery(reply, '1806 02101001 %?%? %?%? 1000 00%?0000 %x');
@@ -456,13 +460,13 @@ export class NetMDInterface {
         } else {
             wcharValue = 0;
         }
-        await this.sendHandshake(0x1801, 0x0100);
-        await this.sendHandshake(0x1801, 0x0000);
-        await this.sendHandshake(0x1801, 0x0300);
+        await this.sendHandshake('180810 1801 0100');
+        await this.sendHandshake('180810 1801 0000');
+        await this.sendHandshake('180810 1801 0300');
         const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %*', wcharValue, newLength, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 02201801 00%? 3000 0a00 5000 %?%? 0000 %?%?');
-        await this.sendHandshake(0x1801, 0x0000);
+        await this.sendHandshake('180810 1801 0100');
     }
 
     async setTrackTitle(track: number, title: string, wchar = false) {
@@ -485,8 +489,9 @@ export class NetMDInterface {
             }
         }
 
-        await this.sendHandshake(0x1802, 0x0000);
-        await this.sendHandshake(0x1802, 0x0300);
+        await this.sendHandshake('180810 1802 0100');
+        await this.sendHandshake('180810 1802 0000');
+        await this.sendHandshake('180810 1802 0300');
         const query = formatQuery('1807 022018%b %w 3000 0a00 5000 %w 0000 %w %*', wcharValue, track, newLen, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 022018%? %?%? 3000 0a00 5000 %?%? 0000 %?%?');
@@ -499,14 +504,14 @@ export class NetMDInterface {
     }
 
     async moveTrack(source: number, dest: number) {
-        await this.sendHandshake(0x1001, 0x0000);
+        await this.sendHandshake('180810 1001 0000');
         const query = formatQuery('1843 ff00 00 201001 %w 201001 %w', source, dest);
         const reply = await this.sendQuery(query);
         // scanQuery(reply, '1843 0000 00 201001 00 %?%? 201001 %?%?');
     }
 
     async _getTrackInfo(track: number, p1: number, p2: number) {
-        await this.sendHandshake(0x1001, 0x0100);
+        await this.sendHandshake('180810 1001 0100');
         const query = formatQuery('1806 02201001 %w %w %w ff00 00000000', track, p1, p2);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1806 02201001 %?%? %?%? %?%? 1000 00%?0000 %x');
@@ -539,7 +544,7 @@ export class NetMDInterface {
     }
 
     async getDiscCapacity() {
-        await this.sendHandshake(0x1000, 0x0100);
+        await this.sendHandshake('180810 1000 0100');
         const query = formatQuery('1806 02101000 3080 0300 ff00 00000000');
         const reply = await this.sendQuery(query);
         let result: number[][] = [];
