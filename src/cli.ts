@@ -228,6 +228,29 @@ async function main() {
                 await netmdInterface.syncTOC();
             }
         )
+        .command(
+            'move [src_track_number] [dst_track_number]',
+            'move track. Track indexes start from 0',
+            yargs => {
+                return yargs
+                    .positional('src_track_number', {
+                        describe: 'Source track number',
+                        type: 'number',
+                        demandOption: true,
+                    })
+                    .positional('dst_track_number', {
+                        describe: 'Destination track number',
+                        type: 'number',
+                        demandOption: true,
+                    });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                await netmdInterface.cacheTOC();
+                await netmdInterface.moveTrack(argv.src_track_number, argv.dst_track_number);
+                await netmdInterface.syncTOC();
+            }
+        )
         .option('verbose', {
             alias: 'v',
             type: 'boolean',
