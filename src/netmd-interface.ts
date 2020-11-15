@@ -11,6 +11,7 @@ import {
     getLengthAfterEncodingToSJIS,
     encodeToSJIS,
     decodeFromSJIS,
+    sleep,
 } from './utils';
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
@@ -114,13 +115,15 @@ class NetMDRejected extends NetMDError {
 }
 
 export class NetMDInterface {
+    static maxInterimReadAttempts = 3;
+    static interimResponseRetryIntervalInMs = 100;
     constructor(public netMd: NetMD, private logger?: Logger) {
         this.logger = logger?.child({ class: 'NetMDInterface' });
     }
 
-    async sendQuery(query: ArrayBuffer, test = false) {
+    async sendQuery(query: ArrayBuffer, test = false, acceptInterim = false) {
         await this.sendCommand(query, test);
-        return this.readReply();
+        return this.readReply(acceptInterim);
     }
 
     async sendCommand(query: ArrayBuffer, test = false) {
@@ -133,20 +136,39 @@ export class NetMDInterface {
         this.netMd.sendCommand(concatArrayBuffers(statusByte, query));
     }
 
-    async readReply() {
-        let { data } = await this.netMd.readReply();
-        if (data === undefined) {
-            throw new Error('unexpected undefined value in readReply');
+    async sendHandshake(handshake: string) {
+        const hs = formatQuery(handshake);
+        await this.sendQuery(hs);
+    }
+
+    async readReply(acceptInterim = false) {
+        let currentAttempt = 0;
+        let data: DataView | undefined;
+        while (currentAttempt < NetMDInterface.maxInterimReadAttempts) {
+            ({ data } = await this.netMd.readReply());
+            if (data === undefined) {
+                throw new Error('unexpected undefined value in readReply');
+            }
+
+            let status = data.getUint8(0);
+            if (status === Status.notImplemented) {
+                throw new NetMDNotImplemented('Not implemented');
+            } else if (status === Status.rejected) {
+                throw new NetMDRejected('Rejected');
+            } else if (status === Status.interim && !acceptInterim) {
+                await sleep(NetMDInterface.interimResponseRetryIntervalInMs * (Math.pow(2, currentAttempt) - 1));
+                currentAttempt += 1;
+                continue; // Retry
+            } else if ([Status.accepted, Status.implemented, Status.interim].indexOf(status) < -1) {
+                throw new NetMDNotImplemented(`Unknown return status: ${status}`);
+            } else {
+                break; // Success!
+            }
         }
-        let status = data.getUint8(0);
-        if (status === Status.notImplemented) {
-            throw new NetMDNotImplemented('Not implemented');
-        } else if (status === Status.rejected) {
-            throw new NetMDRejected('Rejected');
-        } else if ([Status.accepted, Status.implemented, Status.interim].indexOf(status) < -1) {
-            throw new NetMDNotImplemented(`Unknown return status: ${status}`);
+        if (currentAttempt >= NetMDInterface.maxInterimReadAttempts) {
+            throw new NetMDRejected('Max attempts read attempts for interim status reached');
         }
-        return data.buffer.slice(1);
+        return data!.buffer.slice(1);
     }
 
     async acquire() {
@@ -162,6 +184,7 @@ export class NetMDInterface {
     }
 
     async getStatus() {
+        await this.sendHandshake('1808 8000 0100');
         const query = formatQuery('1809 8001 0230 8800 0030 8804 00 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0230 8800 0030 8804 00 1000 00090000 %x');
@@ -175,6 +198,7 @@ export class NetMDInterface {
 
     async getOperatingStatus() {
         // WARNING: Does not work for all devices. See https://github.com/cybercase/webminidisc/issues/21
+        await this.sendHandshake('1808 8000 0100');
         const query = formatQuery('1809 8001 0330 8802 0030 8805 0030 8806 00 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0330 8802 0030 8805 0030 8806 00 1000 00%?0000 0006 8806 0002 %w')[0] as JSBI;
@@ -309,6 +333,7 @@ export class NetMDInterface {
     }
 
     async getTrackCount() {
+        await this.sendHandshake('180810 1001 0100');
         const query = formatQuery('1806 02101001 3000 1000 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res1 = scanQuery(reply, '1806 02101001 %?%? %?%? 1000 00%?0000 %x');
@@ -434,9 +459,13 @@ export class NetMDInterface {
         } else {
             wcharValue = 0;
         }
+        await this.sendHandshake('180810 1801 0100');
+        await this.sendHandshake('180810 1801 0000');
+        await this.sendHandshake('180810 1801 0300');
         const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %*', wcharValue, newLength, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 02201801 00%? 3000 0a00 5000 %?%? 0000 %?%?');
+        await this.sendHandshake('180810 1801 0000');
     }
 
     async setTrackTitle(track: number, title: string, wchar = false) {
@@ -458,6 +487,9 @@ export class NetMDInterface {
                 throw err;
             }
         }
+
+        await this.sendHandshake('180810 1802 0000');
+        await this.sendHandshake('180810 1802 0300');
         const query = formatQuery('1807 022018%b %w 3000 0a00 5000 %w 0000 %w %*', wcharValue, track, newLen, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 022018%? %?%? 3000 0a00 5000 %?%? 0000 %?%?');
@@ -470,12 +502,14 @@ export class NetMDInterface {
     }
 
     async moveTrack(source: number, dest: number) {
+        await this.sendHandshake('180810 1001 0000');
         const query = formatQuery('1843 ff00 00 201001 %w 201001 %w', source, dest);
         const reply = await this.sendQuery(query);
         // scanQuery(reply, '1843 0000 00 201001 00 %?%? 201001 %?%?');
     }
 
     async _getTrackInfo(track: number, p1: number, p2: number) {
+        await this.sendHandshake('180810 1001 0100');
         const query = formatQuery('1806 02201001 %w %w %w ff00 00000000', track, p1, p2);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1806 02201001 %?%? %?%? %?%? 1000 00%?0000 %x');
@@ -508,6 +542,7 @@ export class NetMDInterface {
     }
 
     async getDiscCapacity() {
+        await this.sendHandshake('180810 1000 0100');
         const query = formatQuery('1806 02101000 3080 0300 ff00 00000000');
         const reply = await this.sendQuery(query);
         let result: number[][] = [];
@@ -659,7 +694,7 @@ export class NetMDInterface {
         const totalBytes = pktSize + 24; //framesizedict[wireformat] * frames + pktcount * 24;
 
         const query = formatQuery('1800 080046 f0030103 28 ff 000100 1001 ffff 00 %b %b %d %d', wireformat, discformat, frames, totalBytes);
-        let reply = await this.sendQuery(query);
+        let reply = await this.sendQuery(query, false, true); // Accepts interim response
         scanQuery(reply, '1800 080046 f0030103 28 00 000100 1001 %?%? 00 %*');
 
         const swapNeeded = !isBigEndian();

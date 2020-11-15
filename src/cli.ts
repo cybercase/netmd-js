@@ -56,6 +56,7 @@ async function main() {
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
                 if (argv.readIntervalMS > 0) {
+                    console.log('press Q to exit. Look at cli.js for other commands\n');
                     readline.emitKeypressEvents(process.stdin);
                     process.stdin.setRawMode(true);
                     process.stdin.on('keypress', async (str, key) => {
@@ -224,6 +225,29 @@ async function main() {
                 let netmdInterface = await openDeviceOrExit(usb);
                 await netmdInterface.cacheTOC();
                 await netmdInterface.setTrackTitle(argv.track_number, argv.title);
+                await netmdInterface.syncTOC();
+            }
+        )
+        .command(
+            'move [src_track_number] [dst_track_number]',
+            'move track. Track indexes start from 0',
+            yargs => {
+                return yargs
+                    .positional('src_track_number', {
+                        describe: 'Source track number',
+                        type: 'number',
+                        demandOption: true,
+                    })
+                    .positional('dst_track_number', {
+                        describe: 'Destination track number',
+                        type: 'number',
+                        demandOption: true,
+                    });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                await netmdInterface.cacheTOC();
+                await netmdInterface.moveTrack(argv.src_track_number, argv.dst_track_number);
                 await netmdInterface.syncTOC();
             }
         )
