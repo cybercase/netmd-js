@@ -314,7 +314,6 @@ export class NetMDInterface {
     }
 
     async syncTOC() {
-        await this.sendHandshake('180810 1801 0000');
         const query = formatQuery('1808 10180200 00');
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1808 10180200 00');
@@ -466,7 +465,7 @@ export class NetMDInterface {
         const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %*', wcharValue, newLength, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 02201801 00%? 3000 0a00 5000 %?%? 0000 %?%?');
-        await this.sendHandshake('180810 1801 0100');
+        await this.sendHandshake('180810 1801 0000');
     }
 
     async setTrackTitle(track: number, title: string, wchar = false) {
@@ -489,7 +488,6 @@ export class NetMDInterface {
             }
         }
 
-        await this.sendHandshake('180810 1802 0100');
         await this.sendHandshake('180810 1802 0000');
         await this.sendHandshake('180810 1802 0300');
         const query = formatQuery('1807 022018%b %w 3000 0a00 5000 %w 0000 %w %*', wcharValue, track, newLen, oldLen, encodeToSJIS(title));
