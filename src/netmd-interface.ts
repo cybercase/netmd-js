@@ -155,12 +155,12 @@ export class NetMDInterface {
                 throw new NetMDNotImplemented('Not implemented');
             } else if (status === Status.rejected) {
                 throw new NetMDRejected('Rejected');
-            } else if ([Status.accepted, Status.implemented].indexOf(status) < -1) {
-                throw new NetMDNotImplemented(`Unknown return status: ${status}`);
-            } else if (!acceptInterim && status === Status.interim) {
+            } else if (status === Status.interim && !acceptInterim) {
                 await sleep(NetMDInterface.interimResponseRetryIntervalInMs * (Math.pow(2, currentAttempt) - 1));
                 currentAttempt += 1;
                 continue; // Retry
+            } else if ([Status.accepted, Status.implemented, Status.interim].indexOf(status) < -1) {
+                throw new NetMDNotImplemented(`Unknown return status: ${status}`);
             } else {
                 break; // Success!
             }
