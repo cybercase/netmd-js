@@ -121,9 +121,9 @@ export class NetMDInterface {
         this.logger = logger?.child({ class: 'NetMDInterface' });
     }
 
-    async sendQuery(query: ArrayBuffer, test = false) {
+    async sendQuery(query: ArrayBuffer, test = false, acceptInterim = false) {
         await this.sendCommand(query, test);
-        return this.readReply();
+        return this.readReply(acceptInterim);
     }
 
     async sendCommand(query: ArrayBuffer, test = false) {
@@ -141,7 +141,7 @@ export class NetMDInterface {
         await this.sendQuery(hs);
     }
 
-    async readReply() {
+    async readReply(acceptInterim = false) {
         let currentAttempt = 0;
         let data: DataView | undefined;
         while (currentAttempt < NetMDInterface.maxInterimReadAttempts) {
@@ -157,7 +157,7 @@ export class NetMDInterface {
                 throw new NetMDRejected('Rejected');
             } else if ([Status.accepted, Status.implemented].indexOf(status) < -1) {
                 throw new NetMDNotImplemented(`Unknown return status: ${status}`);
-            } else if (status === Status.interim) {
+            } else if (!acceptInterim && status === Status.interim) {
                 await sleep(NetMDInterface.interimResponseRetryIntervalInMs * (Math.pow(2, currentAttempt) - 1));
                 currentAttempt += 1;
                 continue; // Retry
@@ -694,7 +694,7 @@ export class NetMDInterface {
         const totalBytes = pktSize + 24; //framesizedict[wireformat] * frames + pktcount * 24;
 
         const query = formatQuery('1800 080046 f0030103 28 ff 000100 1001 ffff 00 %b %b %d %d', wireformat, discformat, frames, totalBytes);
-        let reply = await this.sendQuery(query);
+        let reply = await this.sendQuery(query, false, true); // Accepts interim response
         scanQuery(reply, '1800 080046 f0030103 28 00 000100 1001 %?%? 00 %*');
 
         const swapNeeded = !isBigEndian();
