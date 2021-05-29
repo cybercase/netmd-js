@@ -115,7 +115,9 @@ class NetMDRejected extends NetMDError {
 }
 
 export class NetMDInterface {
-    static maxInterimReadAttempts = 3;
+    static maxSyncAttempts = 4;
+    static syncRetryIntervalInMs = 100;
+    static maxInterimReadAttempts = 4;
     static interimResponseRetryIntervalInMs = 100;
     constructor(public netMd: NetMD, private logger?: Logger) {
         this.logger = logger?.child({ class: 'NetMDInterface' });
@@ -139,6 +141,28 @@ export class NetMDInterface {
     async sendHandshake(handshake: string) {
         const hs = formatQuery(handshake);
         await this.sendQuery(hs);
+    }
+
+    async waitForSync() {
+        let currentAttempt = 0;
+        while (currentAttempt < NetMDInterface.maxSyncAttempts) {
+            const { data } = await this.netMd.getReplyLength();
+
+            if (data && data.getUint32(0) === 0) {
+                break;
+            } else {
+                this.logger?.debug({ method: 'waitForSync', result: data });
+            }
+
+            currentAttempt += 1;
+            await sleep(NetMDInterface.syncRetryIntervalInMs * (Math.pow(2, currentAttempt) - 1));
+        }
+
+        if (currentAttempt >= NetMDInterface.maxSyncAttempts) {
+            this.logger?.warn({ method: 'waitForSync', result: 'too many tries without success' });
+        }
+
+        return currentAttempt < NetMDInterface.maxSyncAttempts;
     }
 
     async readReply(acceptInterim = false) {
@@ -673,9 +697,15 @@ export class NetMDInterface {
             mode: Crypto.mode.ECB,
             padding: Crypto.pad.NoPadding,
         });
+
+        await this.waitForSync();
+
         const query = formatQuery('1800 080046 f0030103 48 ff 00 1001 %w %*', tracknum, wordArrayToByteArray(authentication.ciphertext));
         const reply = await this.sendQuery(query);
-        return scanQuery(reply, '1800 080046 f0030103 48 00 00 1001 %?%?');
+        const result = scanQuery(reply, '1800 080046 f0030103 48 00 00 1001 %?%?');
+
+        await this.waitForSync();
+        return result;
     }
 
     async sendTrack(
@@ -696,6 +726,8 @@ export class NetMDInterface {
         const query = formatQuery('1800 080046 f0030103 28 ff 000100 1001 ffff 00 %b %b %d %d', wireformat, discformat, frames, totalBytes);
         let reply = await this.sendQuery(query, false, true); // Accepts interim response
         scanQuery(reply, '1800 080046 f0030103 28 00 000100 1001 %?%? 00 %*');
+
+        await this.waitForSync();
 
         const swapNeeded = !isBigEndian();
         let packetCount = 0;

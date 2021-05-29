@@ -66,7 +66,7 @@ export class NetMD {
         await this.device.selectConfiguration(1);
         await this.device.claimInterface(this.iface);
 
-        const len = await this.getReplyLength();
+        const { len } = await this.getReplyLength();
         if (len > 0) {
             await this.readReply();
         }
@@ -103,7 +103,7 @@ export class NetMD {
         );
         const len = result.data?.getUint8(2) ?? 0;
         this.logger?.debug({ action: 'getReplyLength', result: inspect(result), len });
-        return len;
+        return { len, data: result.data };
     }
 
     public async sendCommand(command: BufferSource) {
@@ -121,11 +121,11 @@ export class NetMD {
     }
 
     public async readReply() {
-        let len = await this.getReplyLength();
+        let { len } = await this.getReplyLength();
         let i = 0;
         while (len === 0) {
             await sleep(NetMD.readReplyRetryIntervalInMsec * Math.pow(2, ~~(i / 10))); // Double wait time every 10 attempts
-            len = await this.getReplyLength();
+            ({ len } = await this.getReplyLength());
             i++;
         }
 
