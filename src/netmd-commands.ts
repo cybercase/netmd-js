@@ -98,6 +98,7 @@ export interface Disc {
 const OperatingStatus = {
     50687: 'ready',
     50037: 'playing',
+    50045: 'paused',
     49983: 'fastForward',
     49999: 'rewind',
     65315: 'readingTOC',
