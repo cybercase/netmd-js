@@ -407,9 +407,14 @@ export class NetMDInterface {
 
     async getDiscTitle(wchar = false) {
         let title = await this._getDiscTitle(wchar);
-        if (title.endsWith('//')) {
-            let firstEntry = title.split('//')[0];
-            if (firstEntry.startsWith('0;')) {
+
+        const delim = wchar ? '／／' : '//';
+        const titleMarker = wchar ? '０；' : '0;';
+
+
+        if (title.endsWith(delim)) {
+            let firstEntry = title.split(delim)[0];
+            if (firstEntry.startsWith(titleMarker)) {
                 title = firstEntry.substring(2);
             } else {
                 title = '';
@@ -838,6 +843,7 @@ export class MDTrack {
         public format: Wireformat,
         public data: ArrayBuffer,
         public chunkSize: number,
+        public fullWidthTitle?: string,
         public encryptPacketsIterator?: (params: {
             kek: Uint8Array;
             frameSize: number;
@@ -845,6 +851,10 @@ export class MDTrack {
             chunkSize: number;
         }) => AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>
     ) {}
+
+    getFullWidthTitle(){
+        return this.fullWidthTitle;
+    }
 
     getTitle() {
         return this.title;
@@ -1015,6 +1025,7 @@ export class MDSession {
         );
         await this.md.cacheTOC();
         await this.md.setTrackTitle(track, trk.title);
+        if(trk.fullWidthTitle) await this.md.setTrackTitle(track, trk.fullWidthTitle, true);
         await this.md.syncTOC();
         await this.md.commitTrack(track, this.hexSessionKey);
         return [track, uuid, ccid];
