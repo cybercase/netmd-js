@@ -12,6 +12,7 @@ import {
     encodeToSJIS,
     decodeFromSJIS,
     sleep,
+    halfWidthToFullWidthRange,
 } from './utils';
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
@@ -428,7 +429,10 @@ export class NetMDInterface {
         let groupList = rawTitle.split('//');
         let trackDict: { [k: number]: [string, number] } = {};
         let trackCount = await this.getTrackCount();
-        let result: [string | null, number[]][] = [];
+        let result: [string | null, string | null, number[]][] = [];
+        let rawFullTitle = await this._getDiscTitle(true);
+        let fullWidthGroupList = rawFullTitle.split('／／');
+
         for (const [groupIndex, group] of groupList.entries()) {
             if (group === '') {
                 continue;
@@ -437,7 +441,9 @@ export class NetMDInterface {
                 continue;
             }
             const [trackRange] = group.split(';', 1);
+            const fullWidthRange = halfWidthToFullWidthRange(trackRange);
             const groupName = group.substring(trackRange.length + 1);
+            const fullWidthGroupName = fullWidthGroupList.find(n => n.startsWith(fullWidthRange))?.substring(trackRange.length + 1);
             let trackMinStr: string, trackMaxStr: string;
             if (trackRange.indexOf('-') >= 0) {
                 [trackMinStr, trackMaxStr] = trackRange.split('-');
@@ -457,11 +463,11 @@ export class NetMDInterface {
                 trackDict[track] = [groupName, groupIndex];
                 trackList.push(track);
             }
-            result.push([groupName, trackList]);
+            result.push([groupName, fullWidthGroupName ?? null, trackList]);
         }
         let trackList = [...Array(trackCount).keys()].filter(x => !(x in trackDict));
         if (trackList.length > 0) {
-            result.unshift([null, trackList]);
+            result.unshift([null, null, trackList]);
         }
         return result;
     }

@@ -82,6 +82,7 @@ export interface Track {
 export interface Group {
     index: number;
     title: string | null;
+    fullWidthTitle: string | null;
     tracks: Track[];
 }
 
@@ -182,10 +183,11 @@ export async function listContent(mdIface: NetMDInterface) {
 
     const trackGroupList = await mdIface.getTrackGroupList();
 
-    for (let [groupIndex, [groupName, trackLists]] of trackGroupList.entries()) {
+    for (let [groupIndex, [groupName, fullWidthName, trackLists]] of trackGroupList.entries()) {
         let g: Group = {
             index: groupIndex,
             title: groupName,
+            fullWidthTitle: fullWidthName,
             tracks: [],
         };
         disc.groups.push(g);
