@@ -144,6 +144,13 @@ async function main() {
             'set disc title and group info',
             yargs => {
                 return yargs
+                    .option('full_width', {
+                        alias: 'w',
+                        describe: 'Use the full width slot (Hiragana/Katakana/Kanji)',
+                        default: false,
+                        demandOption: false,
+                        type: 'boolean',
+                    })
                     .positional('raw_title', {
                         describe: 'new raw_title to set',
                         type: 'string',
@@ -152,7 +159,7 @@ async function main() {
             },
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
-                await netmdInterface.setDiscTitle(argv.raw_title, false);
+                await netmdInterface.setDiscTitle(argv.raw_title, argv.full_width);
             }
         )
         .command(
@@ -197,7 +204,7 @@ async function main() {
                 const getAsyncPacketIteratorOnWorkerThread = makeGetAsyncPacketIteratorOnWorkerThread(
                     new Worker(path.join(__dirname, 'node-encrypt-worker.js'))
                 );
-                let mdTrack = new MDTrack(title, format, data.buffer, 0x100000 /* ~1Mb */, getAsyncPacketIteratorOnWorkerThread);
+                let mdTrack = new MDTrack(title, format, data.buffer, 0x100000 /* ~1Mb */, '', getAsyncPacketIteratorOnWorkerThread);
 
                 let start = Date.now();
                 await download(netmdInterface, mdTrack, progressCallback);
@@ -219,12 +226,19 @@ async function main() {
                         describe: 'track index',
                         type: 'number',
                         demandOption: true,
+                    })
+                    .option('full_width', {
+                        alias: 'w',
+                        describe: 'Use the full width slot (Hiragana/Katakana/Kanji)',
+                        default: false,
+                        demandOption: false,
+                        type: 'boolean',
                     });
             },
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
                 await netmdInterface.cacheTOC();
-                await netmdInterface.setTrackTitle(argv.track_number, argv.title);
+                await netmdInterface.setTrackTitle(argv.track_number, argv.title, argv.full_width);
                 await netmdInterface.syncTOC();
             }
         )
@@ -288,7 +302,7 @@ function printDisc(disc: Disc) {
             console.log(
                 `${g.title !== null ? '  ' : ''}${pad(t.index, '000')}: ${formatTimeFromFrames(t.duration)} - ${Flag[t.protected]} ${
                     EncodingName[t.encoding]
-                } ${ChannelName[t.channel]} - ${t.title}`
+                } ${ChannelName[t.channel]} - ${t.title} | ${t.fullWidthTitle}`
             );
         }
     }
