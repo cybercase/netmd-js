@@ -179,9 +179,26 @@ export function formatTimeFromFrames(value: number, frames: boolean = true) {
     return `${pad(h, '00')}:${pad(m, '00')}:${pad(s, '00')}` + (frames ? `+${pad(f, '000')}` : ``);
 }
 
-export function halfWidthToFullWidthRange(range: string){
-    const mappings:{[key: string]: string} = {'0': '０', '1': '１', '2': '２', '3': '３', '4': '４', '5': '５', '6': '６', '7': '７', '8': '８', '9': '９', '-': '－', '/': '／', ';': '；'};
-    return range.split('').map(n => mappings[n] ?? '').join('');
+export function halfWidthToFullWidthRange(range: string) {
+    const mappings: { [key: string]: string } = {
+        '0': '０',
+        '1': '１',
+        '2': '２',
+        '3': '３',
+        '4': '４',
+        '5': '５',
+        '6': '６',
+        '7': '７',
+        '8': '８',
+        '9': '９',
+        '-': '－',
+        '/': '／',
+        ';': '；',
+    };
+    return range
+        .split('')
+        .map(n => mappings[n] ?? '')
+        .join('');
 }
 
 export function sanitizeTrackTitle(title: string) {

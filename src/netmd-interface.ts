@@ -412,7 +412,6 @@ export class NetMDInterface {
         const delim = wchar ? '／／' : '//';
         const titleMarker = wchar ? '０；' : '0;';
 
-
         if (title.endsWith(delim)) {
             let firstEntry = title.split(delim)[0];
             if (firstEntry.startsWith(titleMarker)) {
@@ -441,9 +440,11 @@ export class NetMDInterface {
                 continue;
             }
             const [trackRange] = group.split(';', 1);
-            const fullWidthRange = halfWidthToFullWidthRange(trackRange);
             const groupName = group.substring(trackRange.length + 1);
-            const fullWidthGroupName = fullWidthGroupList.find(n => n.startsWith(fullWidthRange))?.substring(trackRange.length + 1);
+
+            const fullWidthRange = halfWidthToFullWidthRange(trackRange);
+            const fullWidthGroupName = fullWidthGroupList.find(n => n.startsWith(fullWidthRange))?.substring(fullWidthRange.length + 1);
+
             let trackMinStr: string, trackMaxStr: string;
             if (trackRange.indexOf('-') >= 0) {
                 [trackMinStr, trackMaxStr] = trackRange.split('-');
@@ -858,7 +859,7 @@ export class MDTrack {
         }) => AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>
     ) {}
 
-    getFullWidthTitle(){
+    getFullWidthTitle() {
         return this.fullWidthTitle;
     }
 
@@ -1031,7 +1032,9 @@ export class MDSession {
         );
         await this.md.cacheTOC();
         await this.md.setTrackTitle(track, trk.title);
-        if(trk.fullWidthTitle) await this.md.setTrackTitle(track, trk.fullWidthTitle, true);
+        if (trk.fullWidthTitle) {
+            await this.md.setTrackTitle(track, trk.fullWidthTitle, true);
+        }
         await this.md.syncTOC();
         await this.md.commitTrack(track, this.hexSessionKey);
         return [track, uuid, ccid];
