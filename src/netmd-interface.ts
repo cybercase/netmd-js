@@ -12,6 +12,7 @@ import {
     encodeToSJIS,
     decodeFromSJIS,
     sleep,
+    halfWidthToFullWidthRange,
 } from './utils';
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
@@ -407,9 +408,14 @@ export class NetMDInterface {
 
     async getDiscTitle(wchar = false) {
         let title = await this._getDiscTitle(wchar);
-        if (title.endsWith('//')) {
-            let firstEntry = title.split('//')[0];
-            if (firstEntry.startsWith('0;')) {
+
+        const delim = wchar ? '／／' : '//';
+        const titleMarker = wchar ? '０；' : '0;';
+
+
+        if (title.endsWith(delim)) {
+            let firstEntry = title.split(delim)[0];
+            if (firstEntry.startsWith(titleMarker)) {
                 title = firstEntry.substring(2);
             } else {
                 title = '';
@@ -423,7 +429,10 @@ export class NetMDInterface {
         let groupList = rawTitle.split('//');
         let trackDict: { [k: number]: [string, number] } = {};
         let trackCount = await this.getTrackCount();
-        let result: [string | null, number[]][] = [];
+        let result: [string | null, string | null, number[]][] = [];
+        let rawFullTitle = await this._getDiscTitle(true);
+        let fullWidthGroupList = rawFullTitle.split('／／');
+
         for (const [groupIndex, group] of groupList.entries()) {
             if (group === '') {
                 continue;
@@ -432,7 +441,9 @@ export class NetMDInterface {
                 continue;
             }
             const [trackRange] = group.split(';', 1);
+            const fullWidthRange = halfWidthToFullWidthRange(trackRange);
             const groupName = group.substring(trackRange.length + 1);
+            const fullWidthGroupName = fullWidthGroupList.find(n => n.startsWith(fullWidthRange))?.substring(trackRange.length + 1);
             let trackMinStr: string, trackMaxStr: string;
             if (trackRange.indexOf('-') >= 0) {
                 [trackMinStr, trackMaxStr] = trackRange.split('-');
@@ -452,11 +463,11 @@ export class NetMDInterface {
                 trackDict[track] = [groupName, groupIndex];
                 trackList.push(track);
             }
-            result.push([groupName, trackList]);
+            result.push([groupName, fullWidthGroupName ?? null, trackList]);
         }
         let trackList = [...Array(trackCount).keys()].filter(x => !(x in trackDict));
         if (trackList.length > 0) {
-            result.unshift([null, trackList]);
+            result.unshift([null, null, trackList]);
         }
         return result;
     }
@@ -838,6 +849,7 @@ export class MDTrack {
         public format: Wireformat,
         public data: ArrayBuffer,
         public chunkSize: number,
+        public fullWidthTitle?: string,
         public encryptPacketsIterator?: (params: {
             kek: Uint8Array;
             frameSize: number;
@@ -845,6 +857,10 @@ export class MDTrack {
             chunkSize: number;
         }) => AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>
     ) {}
+
+    getFullWidthTitle(){
+        return this.fullWidthTitle;
+    }
 
     getTitle() {
         return this.title;
@@ -1015,6 +1031,7 @@ export class MDSession {
         );
         await this.md.cacheTOC();
         await this.md.setTrackTitle(track, trk.title);
+        if(trk.fullWidthTitle) await this.md.setTrackTitle(track, trk.fullWidthTitle, true);
         await this.md.syncTOC();
         await this.md.commitTrack(track, this.hexSessionKey);
         return [track, uuid, ccid];

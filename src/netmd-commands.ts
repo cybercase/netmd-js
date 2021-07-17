@@ -72,6 +72,7 @@ export async function listDevice(usb: USB) {
 export interface Track {
     index: number;
     title: string | null;
+    fullWidthTitle: string | null;
     duration: number;
     channel: number;
     encoding: Encoding;
@@ -81,11 +82,13 @@ export interface Track {
 export interface Group {
     index: number;
     title: string | null;
+    fullWidthTitle: string | null;
     tracks: Track[];
 }
 
 export interface Disc {
     title: string;
+    fullWidthTitle: string;
     writable: boolean;
     writeProtected: boolean;
     used: number;
@@ -162,11 +165,13 @@ export function getTracks(disc: Disc): Track[] {
 export async function listContent(mdIface: NetMDInterface) {
     let flags = await mdIface.getDiscFlags();
     const title = await mdIface.getDiscTitle();
+    const fullWidthTitle = await mdIface.getDiscTitle(true);
     const [discUsed, discTotal, discLeft] = await mdIface.getDiscCapacity();
     const trackCount = await mdIface.getTrackCount();
 
     let disc: Disc = {
         title: title,
+        fullWidthTitle: fullWidthTitle,
         writable: !!(flags & DiscFlag.writable),
         writeProtected: !!(flags & DiscFlag.writeProtected),
         used: timeToFrames(discUsed),
@@ -178,10 +183,11 @@ export async function listContent(mdIface: NetMDInterface) {
 
     const trackGroupList = await mdIface.getTrackGroupList();
 
-    for (let [groupIndex, [groupName, trackLists]] of trackGroupList.entries()) {
+    for (let [groupIndex, [groupName, fullWidthName, trackLists]] of trackGroupList.entries()) {
         let g: Group = {
             index: groupIndex,
             title: groupName,
+            fullWidthTitle: fullWidthName,
             tracks: [],
         };
         disc.groups.push(g);
@@ -189,12 +195,14 @@ export async function listContent(mdIface: NetMDInterface) {
         let tracks: Track[] = [];
         for (let [trackIndex, track] of trackLists.entries()) {
             const title = await mdIface.getTrackTitle(track);
+            const fullWidthTitle = await mdIface.getTrackTitle(track, true);
             const [codec, channel] = await mdIface.getTrackEncoding(track);
             const duration = timeToFrames(await mdIface.getTrackLength(track));
             const flags = await mdIface.getTrackFlags(track);
             let t = {
                 index: track,
                 title,
+                fullWidthTitle,
                 duration,
                 channel: channel,
                 encoding: codec as Encoding,
