@@ -105,6 +105,8 @@ const OperatingStatus = {
     49983: 'fastForward',
     49999: 'rewind',
     65315: 'readingTOC',
+    65535: 'loadingDisc',
+    65296: 'noDisc',
 } as const;
 type OperatingStatusType = typeof OperatingStatus[keyof typeof OperatingStatus] | 'unknown';
 
