@@ -1055,9 +1055,7 @@ export class MDSession {
         if (!this.hexSessionKey) {
             throw new Error(`Call init first!`);
         }
-        try {
-            await this.md.syncTOC();
-        } catch (ex) {}
+        await this.md.syncTOC();
         await this.md.setupDownload(trk.getContentID(), trk.getKEK(), this.hexSessionKey);
         let dataFormat = trk.getDataFormat();
         let [track, uuid, ccid] = await this.md.sendTrack(
@@ -1069,12 +1067,12 @@ export class MDSession {
             this.hexSessionKey!,
             progressCallback
         );
-        //await this.md.cacheTOC();
+        await this.md.cacheTOC();
         await this.md.setTrackTitle(track, trk.title);
         if (trk.fullWidthTitle) {
             await this.md.setTrackTitle(track, trk.fullWidthTitle, true);
         }
-        //await this.md.syncTOC();
+        await this.md.syncTOC();
         await this.md.commitTrack(track, this.hexSessionKey);
         return [track, uuid, ccid];
     }
