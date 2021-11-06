@@ -140,8 +140,14 @@ export class NetMDInterface {
     }
 
     async sendHandshake(handshake: string) {
-        const hs = formatQuery(handshake);
-        await this.sendQuery(hs);
+        try {
+            const hs = formatQuery(handshake);
+            await this.sendQuery(hs);
+            return true;
+        } catch (ex) {
+            this.logger?.error({ method: 'sendHandshake', error: ex });
+        }
+        return false;
     }
 
     async waitForSync() {
@@ -339,15 +345,30 @@ export class NetMDInterface {
     }
 
     async syncTOC() {
-        const query = formatQuery('1808 10180200 00');
-        const reply = await this.sendQuery(query);
-        scanQuery(reply, '1808 10180200 00');
+        //A lot of issues related to devices not being supported / broken functionality
+        //happen because of a refusal of the player to sync / cache the ToC.
+        try {
+            const query = formatQuery('1808 10180200 00');
+            const reply = await this.sendQuery(query);
+            scanQuery(reply, '1808 10180200 00');
+            return true;
+        } catch (ex) {
+            this.logger?.error({ method: 'syncTOC', error: ex });
+        }
+        return false;
     }
 
     async cacheTOC() {
-        const query = formatQuery('1808 10180203 00');
-        const reply = await this.sendQuery(query);
-        scanQuery(reply, '1808 10180203 00');
+        try {
+            const query = formatQuery('1808 10180203 00');
+            const reply = await this.sendQuery(query);
+            scanQuery(reply, '1808 10180203 00');
+            return true;
+        } catch (ex) {
+            //See syncTOC
+            this.logger?.error({ method: 'cacheTOC', error: ex });
+        }
+        return false;
     }
 
     async getDiscFlags() {
@@ -371,6 +392,7 @@ export class NetMDInterface {
     }
 
     async _getDiscTitle(wchar = false) {
+        await this.sendHandshake('180810 1001 0100');
         let wcharValue;
         if (wchar) {
             wcharValue = 1;
@@ -440,6 +462,7 @@ export class NetMDInterface {
                 continue;
             }
             const [trackRange] = group.split(';', 1);
+            if (trackRange === '') continue;
             const groupName = group.substring(trackRange.length + 1);
 
             const fullWidthRange = halfWidthToFullWidthRange(trackRange);
@@ -488,20 +511,32 @@ export class NetMDInterface {
 
     async setDiscTitle(title: string, wchar = false) {
         let wcharValue;
-        let oldLen = getLengthAfterEncodingToSJIS(await this.getDiscTitle());
+        let currentTitle = await this._getDiscTitle(wchar);
+        if (currentTitle === title) return; //Setting the same title causes problems with the LAM.
+
+        let oldLen = getLengthAfterEncodingToSJIS(currentTitle);
         let newLength = getLengthAfterEncodingToSJIS(title);
         if (wchar) {
             wcharValue = 1;
         } else {
             wcharValue = 0;
         }
-        await this.sendHandshake('180810 1801 0100');
-        await this.sendHandshake('180810 1801 0000');
-        await this.sendHandshake('180810 1801 0300');
+        if (this.netMd.getVendor() == 0x04dd) {
+            // Sharp disc rename (Issue #67 of webminidisc)
+            await this.sendHandshake('180810 1802 0300');
+        } else {
+            await this.sendHandshake('180810 1801 0100');
+            await this.sendHandshake('180810 1801 0000');
+            await this.sendHandshake('180810 1801 0300');
+        }
         const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %*', wcharValue, newLength, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 02201801 00%? 3000 0a00 5000 %?%? 0000 %?%?');
-        await this.sendHandshake('180810 1801 0000');
+        if (this.netMd.getVendor() == 0x04dd) {
+            await this.sendHandshake('180810 1802 0000');
+        } else {
+            await this.sendHandshake('180810 1801 0000');
+        }
     }
 
     async setTrackTitle(track: number, title: string, wchar = false) {
@@ -515,7 +550,9 @@ export class NetMDInterface {
         let oldLen: number;
         let newLen: number = getLengthAfterEncodingToSJIS(title);
         try {
-            oldLen = getLengthAfterEncodingToSJIS(await this.getTrackTitle(track));
+            let currentTitle = await this.getTrackTitle(track, wchar);
+            if (title === currentTitle) return;
+            oldLen = getLengthAfterEncodingToSJIS(currentTitle);
         } catch (err) {
             if (err instanceof NetMDRejected) {
                 oldLen = 0;
@@ -524,8 +561,7 @@ export class NetMDInterface {
             }
         }
 
-        await this.sendHandshake('180810 1802 0000');
-        await this.sendHandshake('180810 1802 0300');
+        await this.sendQuery(formatQuery('180810 18%b 0300', wcharValue)); //cacheTOC?
         const query = formatQuery('1807 022018%b %w 3000 0a00 5000 %w 0000 %w %*', wcharValue, track, newLen, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 022018%? %?%? 3000 0a00 5000 %?%? 0000 %?%?');
@@ -1019,6 +1055,7 @@ export class MDSession {
         if (!this.hexSessionKey) {
             throw new Error(`Call init first!`);
         }
+        await this.md.syncTOC();
         await this.md.setupDownload(trk.getContentID(), trk.getKEK(), this.hexSessionKey);
         let dataFormat = trk.getDataFormat();
         let [track, uuid, ccid] = await this.md.sendTrack(
