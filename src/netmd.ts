@@ -27,7 +27,7 @@ export const DevicesIds = [
     { vendorId: 0x054c, deviceId: 0x00c9, name: 'Sony MZ-N510/N610' },
     { vendorId: 0x054c, deviceId: 0x00ca, name: 'Sony MZ-NE410/NF520D' },
     { vendorId: 0x054c, deviceId: 0x00eb, name: 'Sony MZ-NE810/NE910' },
-    { vendorId: 0x054c, deviceId: 0x0101, name: 'Sony LAM-10' },
+    { vendorId: 0x054c, deviceId: 0x0101, name: 'Sony LAM' }, //They all report the same VID/PID
     { vendorId: 0x054c, deviceId: 0x0113, name: 'Aiwa AM-NX1' },
     { vendorId: 0x054c, deviceId: 0x013f, name: 'Sony MDS-S500' },
     { vendorId: 0x054c, deviceId: 0x014c, name: 'Aiwa AM-NX9' },
@@ -46,6 +46,7 @@ export const DevicesIds = [
     { vendorId: 0x054c, deviceId: 0x022c, name: 'Sony CMT-AH10' },
     { vendorId: 0x054c, deviceId: 0x023c, name: 'Sony DS-HMD1' },
     { vendorId: 0x054c, deviceId: 0x0286, name: 'Sony MZ-RH1' },
+    { vendorId: 0x054c, deviceId: 0x011a, name: 'Sony CMT-SE7' },
     { vendorId: 0x0b28, deviceId: 0x1004, name: 'Kenwood MDX-J9' },
 ];
 
@@ -77,6 +78,10 @@ export class NetMD {
         let { vendorId, productId } = this.device;
         let deviceId = DevicesIds.find(device => device.deviceId === productId && device.vendorId === vendorId);
         return deviceId?.name ?? 'Unknown Device';
+    }
+
+    getVendor() {
+        return this.device.vendorId;
     }
 
     async finalize() {
