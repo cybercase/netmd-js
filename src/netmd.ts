@@ -48,6 +48,7 @@ export const DevicesIds = [
     { vendorId: 0x054c, deviceId: 0x0286, name: 'Sony MZ-RH1' },
     { vendorId: 0x054c, deviceId: 0x011a, name: 'Sony CMT-SE7' },
     { vendorId: 0x0b28, deviceId: 0x1004, name: 'Kenwood MDX-J9' },
+    { vendorId: 0x04da, deviceId: 0x23b3, name: 'Panasonic SJ-MR250' },
 ];
 
 export class NetMD {
