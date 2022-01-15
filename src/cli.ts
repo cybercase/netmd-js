@@ -16,12 +16,14 @@ import {
     EncodingName,
     Flag,
     ChannelName,
+    upload,
 } from './netmd-commands';
 import { MDTrack, Wireformat } from './netmd-interface';
 import { pad, formatTimeFromFrames, sanitizeTrackTitle, sleep } from './utils';
 import { makeGetAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker';
 import { Worker } from 'worker_threads';
 import readline from 'readline';
+import { DiscFormat } from '.';
 
 async function main() {
     async function openDeviceOrExit(usb: USB) {
@@ -210,6 +212,38 @@ async function main() {
                 await download(netmdInterface, mdTrack, progressCallback);
                 let stop = Date.now();
                 console.log('Time:', stop - start);
+            }
+        )
+        .command(
+            'download [track_number] [outputfile]',
+            'download song from player to the PC. Track indexes start from 0. Only applicable to MZ-RH1 / MZ-M200',
+            yargs => {
+                return yargs
+                    .positional('track_number', {
+                        describe: 'track index',
+                        type: 'number',
+                        demandOption: true,
+                    })
+                    .positional('outputfile', {
+                        describe: 'output file',
+                        type: 'string',
+                        demandOption: false,
+                    });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+
+                const [format, data] = await upload(netmdInterface, argv.track_number, ({ readBytes, totalBytes }) => {
+                    console.log(`Reading ${readBytes} / ${totalBytes}`);
+                });
+
+                const outfile =
+                    argv.outputfile ||
+                    `${await netmdInterface.getTrackTitle(argv.track_number)}.${
+                        [DiscFormat.lp2, DiscFormat.lp4].includes(format) ? 'wav' : 'aea'
+                    }`;
+
+                fs.writeFileSync(outfile, data);
             }
         )
         .command(

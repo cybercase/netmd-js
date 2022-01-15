@@ -1,4 +1,4 @@
-import { assert, assertUint8Array } from './utils';
+import { assert, assertUint8Array, hexEncode } from './utils';
 import JSBI from 'jsbi';
 
 // prettier-ignore
@@ -10,6 +10,7 @@ const FORMAT_TYPE_LEN_DICT: { [k: string]: number } = {
 };
 
 export function formatQuery(format: string, ...args: unknown[]): ArrayBuffer {
+    //console.log("SENT>>> F: ", format);
     let result = [];
     let half: null | string = null;
     let argStack = Array.from(args);
@@ -75,6 +76,18 @@ export function scanQuery(query: ArrayBuffer | number[], format: string) {
     } else {
         inputStack = query;
     }
+    /*
+    console.log("<<<RECV F: ", format);
+    let dformat = Array.from(new Uint8Array(query)).map(x => x.toString(16).padStart(2, '0')).join('').split('');
+    let n = format.indexOf(' ');
+    while(n != -1){
+        const partialFormat = format.substring(0, n);
+        const amountOfWords = (partialFormat.length - partialFormat.replace("%w", '').length) / 2;
+        dformat.splice(n + amountOfWords * 2, 0, ' ');
+        n = format.indexOf(' ', n+1);
+    }
+    console.log("<<<RECV D: ", dformat.join(''));
+    */
     let initialLength = inputStack.length;
     let half: string | null = null;
     let escaped = false;

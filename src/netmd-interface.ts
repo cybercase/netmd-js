@@ -13,6 +13,8 @@ import {
     decodeFromSJIS,
     sleep,
     halfWidthToFullWidthRange,
+    sanitizeFullWidthTitle,
+    sanitizeHalfWidthTitle,
 } from './utils';
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
@@ -239,7 +241,7 @@ export class NetMDInterface {
     async _getPlaybackStatus(p1: number, p2: number) {
         const query = formatQuery('1809 8001 0330 %w 0030 8805 0030 %w 00 ff00 00000000', p1, p2);
         const reply = await this.sendQuery(query);
-        let res = scanQuery(reply, '1809 8001 0330 %?%? %?%? %?%? %?%? %?%? %? 1000 00%?0000 %x');
+        let res = scanQuery(reply, '1809 8001 0330 %?%? %?%? %?%? %?%? %?%? %? 1000 00%?0000 %x %?'); //Fix MZ-RH1 not launching
         return res[0] as Uint8Array;
     }
 
@@ -301,9 +303,13 @@ export class NetMDInterface {
     }
 
     async stop() {
-        const query = formatQuery('18c5 ff 00000000');
-        const reply = await this.sendQuery(query);
-        scanQuery(reply, '18c5 00 00000000');
+        try {
+            const query = formatQuery('18c5 ff 00000000');
+            const reply = await this.sendQuery(query);
+            scanQuery(reply, '18c5 00 00000000');
+        } catch (ex) {
+            // Ignore (fix for LAM-1)
+        }
     }
 
     async gotoTrack(track: number) {
@@ -518,8 +524,10 @@ export class NetMDInterface {
         let newLength = getLengthAfterEncodingToSJIS(title);
         if (wchar) {
             wcharValue = 1;
+            title = sanitizeFullWidthTitle(title);
         } else {
             wcharValue = 0;
+            title = sanitizeHalfWidthTitle(title);
         }
         if (this.netMd.getVendor() == 0x04dd) {
             // Sharp disc rename (Issue #67 of webminidisc)
@@ -535,7 +543,10 @@ export class NetMDInterface {
         if (this.netMd.getVendor() == 0x04dd) {
             await this.sendHandshake('180810 1802 0000');
         } else {
+            //await this.sendHandshake('180810 1801 0000');
+            await this.sendHandshake('180810 1801 0100');
             await this.sendHandshake('180810 1801 0000');
+            await this.sendHandshake('180810 1801 0300');
         }
     }
 
@@ -543,8 +554,10 @@ export class NetMDInterface {
         let wcharValue;
         if (wchar) {
             wcharValue = 3;
+            title = sanitizeFullWidthTitle(title);
         } else {
             wcharValue = 2;
+            title = sanitizeHalfWidthTitle(title);
         }
 
         let oldLen: number;
@@ -618,12 +631,13 @@ export class NetMDInterface {
         const query = formatQuery('1806 02101000 3080 0300 ff00 00000000');
         const reply = await this.sendQuery(query);
         let result: number[][] = [];
+        // 8003 changed to %b03 - Panasonic returns 0803 instead. This byte's meaning is unknown
         let res = scanQuery(
             reply,
-            '1806 02101000 3080 0300 1000 001d0000 001b 8003 0017 8000 0005 %w %b %b %b 0005 %w %b %b %b 0005 %w %b %b %b'
+            '1806 02101000 3080 0300 1000 001d0000 001b %b03 0017 8000 0005 %w %b %b %b 0005 %w %b %b %b 0005 %w %b %b %b'
         );
         for (let i = 0; i < 3; i++) {
-            let offset = i * 4;
+            let offset = i * 4 + 1;
             let tmp: number[] = [
                 BCD2int(JSBI.toNumber(res[offset + 0] as JSBI)),
                 BCD2int(JSBI.toNumber(res[offset + 1] as JSBI)),
@@ -642,7 +656,19 @@ export class NetMDInterface {
         return res.map(i => JSBI.toNumber(i as JSBI));
     }
 
-    // TODO: saveTrackToStream
+    async saveTrackToArray(track: number, callback?: (length: number, read: number) => void): Promise<[DiscFormat, number, Uint8Array]> {
+        // This can only be executed on an MZ-RH1 / M200
+        const query = formatQuery('1800 080046 f003010330 ff00 1001 %w', track + 1);
+        const reply = await this.sendQuery(query, false, true);
+        const [frames, codec, length] = scanQuery(reply, '1800 080046 f003010330 0000 1001 %w %b %d');
+        const result = await this.netMd.readBulk(length as number, 0x10000, callback);
+        scanQuery(await this.readReply(), '1800 080046 f003010330 0000 1001 %?%? 00%?'); //The last byte is some kind of error counter.
+        await sleep(500);
+
+        let format: DiscFormat = ((codec as number) & 0x06) as DiscFormat;
+
+        return [format, frames as number, result];
+    }
 
     async disableNewTrackProtection(val: number) {
         const query = formatQuery('1800 080046 f0030103 2b ff %w', val);
@@ -1074,6 +1100,9 @@ export class MDSession {
         }
         await this.md.syncTOC();
         await this.md.commitTrack(track, this.hexSessionKey);
+        await this.md.sendHandshake('180810 1801 0100');
+        await this.md.sendHandshake('180810 1801 0000');
+        await this.md.sendHandshake('180810 1801 0300');
         return [track, uuid, ccid];
     }
 

@@ -3,7 +3,7 @@ import { sleep, concatArrayBuffers } from './utils';
 import { Logger } from './logger';
 
 const BULK_WRITE_ENDPOINT = 0x02;
-const BULK_READ_ENDPOINT = 0x81;
+const BULK_READ_ENDPOINT = 0x01;
 
 export const DevicesIds = [
     { vendorId: 0x04dd, deviceId: 0x7202, name: 'Sharp IM-MT899H' },
@@ -48,6 +48,7 @@ export const DevicesIds = [
     { vendorId: 0x054c, deviceId: 0x0286, name: 'Sony MZ-RH1' },
     { vendorId: 0x054c, deviceId: 0x011a, name: 'Sony CMT-SE7' },
     { vendorId: 0x0b28, deviceId: 0x1004, name: 'Kenwood MDX-J9' },
+    { vendorId: 0x04da, deviceId: 0x23b3, name: 'Panasonic SJ-MR250' },
 ];
 
 export class NetMD {
@@ -82,6 +83,10 @@ export class NetMD {
 
     getVendor() {
         return this.device.vendorId;
+    }
+
+    getProduct() {
+        return this.device.productId;
     }
 
     async finalize() {
@@ -149,20 +154,21 @@ export class NetMD {
         return result;
     }
 
-    public async readBulk(length: number) {
-        let result = await this.readBulkToArray(length);
+    public async readBulk(length: number, chunksize: number = 0x10000, callback?: (length: number, read: number) => void) {
+        let result = await this.readBulkToArray(length, chunksize, callback);
         return new Uint8Array(result);
     }
 
-    public async readBulkToArray(length: number, chunksize: number = 0x10000) {
+    public async readBulkToArray(length: number, chunksize: number = 0x10000, callback?: (length: number, read: number) => void) {
         let done = 0;
         let buffer = new ArrayBuffer(0);
         while (done < length) {
-            let res = await this.device.transferIn(this.iface, Math.min(length - done, length));
+            let res = await this.device.transferIn(BULK_READ_ENDPOINT, Math.min(length - done, chunksize));
             if (!res.data) {
                 throw new Error('expected data');
             }
-            done += res.data.byteLength; // TODO: handle this case
+            done += res.data.byteLength;
+            if (callback) callback(length, done);
             buffer = concatArrayBuffers(buffer, res.data.buffer);
         }
         return buffer;
