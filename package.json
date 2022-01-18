@@ -1,6 +1,6 @@
 {
   "name": "netmd-js",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Access to NetMD MiniDisc devices",
   "main": "./dist/index.js",
   "repository": {

@@ -1065,6 +1065,7 @@ export class MDSession {
 
     async init() {
         await this.md.enterSecureSession();
+        await this.md.getLeafID(); // Panasonic compatibility
         const [chain, depth, sig] = this.ekbobject.getEKBDataForLeafId();
         await this.md.sendKeyData(JSBI.BigInt(this.ekbobject.getEKBID()), chain, depth, sig);
         let hostnonce = new Uint8Array(

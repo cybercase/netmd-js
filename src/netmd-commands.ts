@@ -321,13 +321,13 @@ export async function rewriteDiscGroups(mdIface: NetMDInterface, disc: Disc) {
     const compiled = compileDiscTitles(disc);
     if (!compiled) return;
     const { newRawTitle, newRawFullWidthTitle } = compiled;
-    mdIface.setDiscTitle(newRawTitle);
-    mdIface.setDiscTitle(newRawTitle, true);
+    await mdIface.setDiscTitle(newRawTitle);
+    await mdIface.setDiscTitle(newRawFullWidthTitle, true);
 }
 
 export async function renameDisc(mdIface: NetMDInterface, newName: string, newFullWidthName?: string) {
     newName = sanitizeHalfWidthTitle(newName);
-    newFullWidthName = newFullWidthName ? sanitizeFullWidthTitle(newFullWidthName) : undefined;
+    newFullWidthName = newFullWidthName !== undefined ? sanitizeFullWidthTitle(newFullWidthName) : undefined;
 
     const oldName = await mdIface.getDiscTitle();
     const oldFullWidthName = await mdIface.getDiscTitle(true);
