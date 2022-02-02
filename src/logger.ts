@@ -14,7 +14,7 @@ export enum Level {
 }
 
 export class ConsoleLogger {
-    constructor(public level: Level = Level.info, public ctx: object = {}) {}
+    constructor(public level: Level = Level.debug, public ctx: object = {}) {}
 
     debug(...args: any) {
         if (this.level >= Level.debug) {
