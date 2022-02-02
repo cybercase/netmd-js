@@ -24,6 +24,7 @@ import { makeGetAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker'
 import { Worker } from 'worker_threads';
 import readline from 'readline';
 import { DiscFormat } from '.';
+import { formatQuery } from './query-utils';
 
 async function main() {
     async function openDeviceOrExit(usb: USB) {
@@ -107,7 +108,7 @@ async function main() {
             yargs => {
                 return yargs.positional('command', {
                     alias: 'c',
-                    choices: ['play', 'stop', 'next', 'prev'],
+                    choices: ['play', 'stop', 'next', 'prev', 'eject'],
                 });
             },
             async argv => {
@@ -126,9 +127,51 @@ async function main() {
                     case 'prev':
                         await netmdInterface.previousTrack();
                         break;
+                    case 'eject':
+                        await netmdInterface.ejectDisc();
+                        break;
                     default:
                         throw new Error(`Unexpected command ${command}`);
                 }
+            }
+        )
+        .command(
+            'goto [track]',
+            'go to specific track',
+            yargs => {
+                return yargs.positional('track', {
+                    alias: 't',
+                    type: 'number',
+                    demandOption: true,
+                });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                await netmdInterface.gotoTrack(argv.track);
+            }
+        )
+        .command(
+            'll [command]',
+            'send low level command to device',
+            yargs => {
+                return yargs.positional('command', {
+                    type: 'string',
+                    alias: 'c',
+                    demandOption: true,
+                });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                console.log(await netmdInterface.sendQuery(formatQuery(argv.command as string)));
+            }
+        )
+        .command(
+            'wipe',
+            'erase the disc',
+            yargs => {},
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                await netmdInterface.eraseDisc();
             }
         )
         .command(
@@ -271,9 +314,7 @@ async function main() {
             },
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
-                await netmdInterface.cacheTOC();
                 await netmdInterface.setTrackTitle(argv.track_number, argv.title, argv.full_width);
-                await netmdInterface.syncTOC();
             }
         )
         .command(
@@ -294,9 +335,7 @@ async function main() {
             },
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
-                await netmdInterface.cacheTOC();
                 await netmdInterface.moveTrack(argv.src_track_number, argv.dst_track_number);
-                await netmdInterface.syncTOC();
             }
         )
         .option('verbose', {

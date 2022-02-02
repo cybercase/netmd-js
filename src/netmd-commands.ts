@@ -14,7 +14,7 @@ import {
     halfWidthToFullWidthRange,
 } from './utils';
 import { Logger } from './logger';
-import { DiscFormat } from '.';
+import { Descriptor, DescriptorAction, DiscFormat } from '.';
 
 export const EncodingName: { [k: number]: string } = {
     [Encoding.sp]: 'sp',
@@ -117,6 +117,7 @@ const OperatingStatus = {
     49999: 'rewind',
     65315: 'readingTOC',
     65296: 'noDisc',
+    65535: 'discBlank',
 } as const;
 type OperatingStatusType = typeof OperatingStatus[keyof typeof OperatingStatus] | 'unknown';
 
@@ -151,7 +152,7 @@ export async function getDeviceStatus(mdIface: NetMDInterface): Promise<DeviceSt
         : null;
 
     return {
-        discPresent,
+        discPresent: discPresent && !['readingTOC', 'noDisc'].includes(state),
         state,
         track,
         time,
@@ -231,6 +232,7 @@ export async function listContent(mdIface: NetMDInterface) {
 const fixLength = (len: number) => Math.ceil(len / 7);
 
 export function getCellsForTitle(trk: Track) {
+    // Sometimes 'LP: ' is added to track names even if the title is '' (+1 cell)
     return Math.max(1, fixLength((trk.fullWidthTitle?.length ?? 0) * 2)) + Math.max(1, fixLength(getHalfWidthTitleLength(trk.title ?? '')));
 }
 
@@ -256,7 +258,6 @@ export function getRemainingCharactersForTitles(disc: Disc, includeGroups?: bool
     usedCells += fixLength(fwTitle.length * 2);
     usedCells += fixLength(getHalfWidthTitleLength(hwTitle));
     for (let trk of getTracks(disc)) {
-        //Sometimes 'LP: ' is added to track names even if the title is '' (+1 cell)
         usedCells += getCellsForTitle(trk);
     }
     return Math.max(cellLimit - usedCells, 0) * 7;
@@ -352,9 +353,7 @@ export async function renameDisc(mdIface: NetMDInterface, newName: string, newFu
         } else {
             newFullWidthNameWithGroups = newFullWidthName;
         }
-        await mdIface.cacheTOC();
         await mdIface.setDiscTitle(newFullWidthNameWithGroups, true);
-        await mdIface.syncTOC();
     }
 
     if (newName === oldName) {
@@ -373,9 +372,7 @@ export async function renameDisc(mdIface: NetMDInterface, newName: string, newFu
         newNameWithGroups = newName;
     }
 
-    await mdIface.cacheTOC();
     await mdIface.setDiscTitle(newNameWithGroups);
-    await mdIface.syncTOC();
 }
 
 export async function upload(
@@ -407,7 +404,7 @@ export async function download(
 ) {
     // Sometimes netmd-js sends the setupDownload command prematurely, causing it to be rejected.
     // Wait for the device to be ready before sending the (next) track.
-    while ((await getDeviceStatus(mdIface)).state != 'ready') {
+    while (!['ready', 'discBlank'].includes((await getDeviceStatus(mdIface)).state)) {
         await sleep(200);
     }
     try {

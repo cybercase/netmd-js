@@ -89,6 +89,31 @@ export enum DiscFlag {
     writeProtected = 0x40,
 }
 
+export enum NetMDLevel {
+    level1 = 0x20, // Network MD
+    level2 = 0x50, // Program play MD
+    level3 = 0x70, // Editing MD
+}
+
+export enum Descriptor {
+    // TD - text database
+    discTitleTD = '10 1801',
+    audioUTOC1TD = '10 1802',
+    audioUTOC4TD = '10 1803',
+    DSITD = '10 1804',
+    audioContentsTD = '10 1001',
+    rootTD = '10 1000',
+
+    discSubunitIndentifier = '00',
+    operatingStatusBlock = '80 00', // Real name unknown
+}
+
+export enum DescriptorAction {
+    openRead = '01',
+    openWrite = '03',
+    close = '00',
+}
+
 export const FrameSize: { [k: number]: number } = {
     [Wireformat.pcm]: 2048,
     [Wireformat.lp2]: 192,
@@ -126,6 +151,111 @@ export class NetMDInterface {
         this.logger = logger?.child({ class: 'NetMDInterface' });
     }
 
+    async _getDiscSubunitIdentifier() {
+        await this.changeDescriptorState(Descriptor.discSubunitIndentifier, DescriptorAction.openRead);
+        const query = formatQuery('1809 00 ff00 0000 0000');
+        const reply = await this.sendQuery(query);
+        let res = scanQuery(reply, '1809 00 1000 %?%? %?%? %w %b %b %b %b %w %*');
+
+        // Decoding the structure
+        const descriptorLength = JSBI.toNumber(res[0] as JSBI);
+        const generationID = JSBI.toNumber(res[1] as JSBI);
+        const sizeOfListID = JSBI.toNumber(res[2] as JSBI);
+        const sizeOfObjectID = JSBI.toNumber(res[3] as JSBI);
+        const sizeOfObjectPosition = JSBI.toNumber(res[4] as JSBI);
+        const amtOfRootObjectLists = JSBI.toNumber(res[5] as JSBI);
+        const buffer = res[6] as Uint8Array;
+        const rootObjects = [];
+
+        let bufferOffset = 0;
+
+        function constructMultibyte(n: number) {
+            let output = 0;
+            for (let i = 0; i < n; i++) {
+                output <<= 8;
+                output |= buffer[bufferOffset++];
+            }
+            return output;
+        }
+
+        for (let i = 0; i < amtOfRootObjectLists; i++) {
+            rootObjects.push(constructMultibyte(sizeOfListID));
+        }
+
+        const subunitDependentLength = constructMultibyte(2);
+        const subunitFieldsLength = constructMultibyte(2);
+        const attributes = buffer[bufferOffset++];
+        const discSubunitVersion = buffer[bufferOffset++];
+
+        const supportedMediaTypeSpecifications: { [key: number]: any } = {};
+        const amtSupportedMediaTypes = buffer[bufferOffset++];
+        for (let i = 0; i < amtSupportedMediaTypes; i++) {
+            const supportedMediaType = constructMultibyte(2);
+
+            const implentationProfileID = buffer[bufferOffset++];
+            const mediaTypeAttributes = buffer[bufferOffset++];
+            const typeDepLength = constructMultibyte(2);
+
+            const mdAudioVersion = buffer[bufferOffset++];
+            const supportsMDClip = buffer[bufferOffset++];
+            supportedMediaTypeSpecifications[supportedMediaType] = {
+                supportedMediaType,
+                implentationProfileID,
+                mediaTypeAttributes,
+                mdAudioVersion,
+                supportsMDClip,
+            };
+        }
+
+        assert(Object.keys(supportedMediaTypeSpecifications).includes('769'), "This Minidisc recorder doesn't support Minidiscs");
+
+        const manufacturerDepLength = constructMultibyte(2);
+        const manufacturerDepData = buffer.slice(bufferOffset, bufferOffset + manufacturerDepLength);
+
+        console.log('-------------DEBUG-------------');
+        console.log(
+            JSON.stringify(
+                {
+                    descriptorLength,
+                    generationID,
+                    sizeOfListID,
+                    sizeOfObjectID,
+                    sizeOfObjectPosition,
+                    amtOfRootObjectLists,
+                    buffer: [...buffer],
+                    rootObjects,
+                    subunitDependentLength,
+                    subunitFieldsLength,
+                    attributes,
+                    discSubunitVersion,
+                    amtSupportedMediaTypes,
+                    supportedMediaTypeSpecifications,
+                    manufacturerDepLength,
+                    manufacturerDepData: [...manufacturerDepData],
+                },
+                null,
+                5
+            )
+        );
+        console.log('-------------DEBUG-------------');
+        this.changeDescriptorState(Descriptor.discSubunitIndentifier, DescriptorAction.close);
+        return {
+            netMDLevel: supportedMediaTypeSpecifications[0x301].implentationProfileID as NetMDLevel,
+        };
+    }
+
+    async getNetMDLevel() {
+        return (await this._getDiscSubunitIdentifier()).netMDLevel;
+    }
+
+    async changeDescriptorState(descriptor: Descriptor, action: DescriptorAction) {
+        try {
+            await this.sendQuery(formatQuery(`1808 ${descriptor} ${action} 00`));
+        } catch (ex) {
+            this.logger?.error({ method: 'sendHandshake', error: ex, descriptor, action });
+        }
+    }
+
     async sendQuery(query: ArrayBuffer, test = false, acceptInterim = false) {
         await this.sendCommand(query, test);
         return this.readReply(acceptInterim);
@@ -139,17 +269,6 @@ export class NetMDInterface {
             statusByte = new Uint8Array([Status.control]).buffer;
         }
         this.netMd.sendCommand(concatArrayBuffers(statusByte, query));
-    }
-
-    async sendHandshake(handshake: string) {
-        try {
-            const hs = formatQuery(handshake);
-            await this.sendQuery(hs);
-            return true;
-        } catch (ex) {
-            this.logger?.error({ method: 'sendHandshake', error: ex });
-        }
-        return false;
     }
 
     async waitForSync() {
@@ -217,10 +336,11 @@ export class NetMDInterface {
     }
 
     async getStatus() {
-        await this.sendHandshake('1808 8000 0100');
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.openRead);
         const query = formatQuery('1809 8001 0230 8800 0030 8804 00 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0230 8800 0030 8804 00 1000 00090000 %x');
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.close);
         return res[0] as Uint8Array;
     }
 
@@ -231,17 +351,20 @@ export class NetMDInterface {
 
     async getOperatingStatus() {
         // WARNING: Does not work for all devices. See https://github.com/cybercase/webminidisc/issues/21
-        await this.sendHandshake('1808 8000 0100');
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.openRead);
         const query = formatQuery('1809 8001 0330 8802 0030 8805 0030 8806 00 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0330 8802 0030 8805 0030 8806 00 1000 00%?0000 0006 8806 0002 %w')[0] as JSBI;
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.close);
         return JSBI.toNumber(res);
     }
 
     async _getPlaybackStatus(p1: number, p2: number) {
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.openRead);
         const query = formatQuery('1809 8001 0330 %w 0030 8805 0030 %w 00 ff00 00000000', p1, p2);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0330 %?%? %?%? %?%? %?%? %?%? %? 1000 00%?0000 %x %?'); //Fix MZ-RH1 not launching
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.close);
         return res[0] as Uint8Array;
     }
 
@@ -254,6 +377,7 @@ export class NetMDInterface {
     }
 
     async getPosition() {
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.openRead);
         const query = formatQuery('1809 8001 0430 8802 0030 8805 0030 0003 0030 0002 00 ff00 00000000');
         let reply;
         try {
@@ -276,8 +400,23 @@ export class NetMDInterface {
         result[2] = BCD2int(JSBI.toNumber(result[2] as JSBI));
         result[3] = BCD2int(JSBI.toNumber(result[3] as JSBI));
         result[4] = BCD2int(JSBI.toNumber(result[4] as JSBI));
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.close);
 
         return result as number[];
+    }
+
+    async ejectDisc() {
+        const query = formatQuery('18c1 ff 6000');
+        const reply = await this.sendQuery(query);
+    }
+
+    async canEjectDisc() {
+        try {
+            await this.sendQuery(formatQuery('18c1 ff 6000'), true);
+            return true;
+        } catch (err) {
+            return false;
+        }
     }
 
     async _play(action: number) {
@@ -350,33 +489,6 @@ export class NetMDInterface {
         scanQuery(reply, '1840 00 0000');
     }
 
-    async syncTOC() {
-        //A lot of issues related to devices not being supported / broken functionality
-        //happen because of a refusal of the player to sync / cache the ToC.
-        try {
-            const query = formatQuery('1808 10180200 00');
-            const reply = await this.sendQuery(query);
-            scanQuery(reply, '1808 10180200 00');
-            return true;
-        } catch (ex) {
-            this.logger?.error({ method: 'syncTOC', error: ex });
-        }
-        return false;
-    }
-
-    async cacheTOC() {
-        try {
-            const query = formatQuery('1808 10180203 00');
-            const reply = await this.sendQuery(query);
-            scanQuery(reply, '1808 10180203 00');
-            return true;
-        } catch (ex) {
-            //See syncTOC
-            this.logger?.error({ method: 'cacheTOC', error: ex });
-        }
-        return false;
-    }
-
     async getDiscFlags() {
         const query = formatQuery('1806 01101000 ff00 0001000b');
         const reply = await this.sendQuery(query);
@@ -385,7 +497,7 @@ export class NetMDInterface {
     }
 
     async getTrackCount() {
-        await this.sendHandshake('180810 1001 0100');
+        await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.openRead);
         const query = formatQuery('1806 02101001 3000 1000 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res1 = scanQuery(reply, '1806 02101001 %?%? %?%? 1000 00%?0000 %x');
@@ -394,11 +506,12 @@ export class NetMDInterface {
         assert(data.substring(0, 5) === `\x00\x10\x00\x02\x00`, `Wrong header in data response`);
         let res2 = data.charCodeAt(5);
         this.logger?.debug({ method: `getTrackCount`, result: res2 });
+        await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.close);
         return res2;
     }
 
     async _getDiscTitle(wchar = false) {
-        await this.sendHandshake('180810 1001 0100');
+        await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.openRead);
         let wcharValue;
         if (wchar) {
             wcharValue = 1;
@@ -431,6 +544,7 @@ export class NetMDInterface {
         }
         let res = result.join('');
         this.logger?.debug({ method: `_getDiscTitle`, result: res });
+        await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.close);
         return res;
     }
 
@@ -509,9 +623,11 @@ export class NetMDInterface {
         } else {
             wcharValue = 2;
         }
+        await this.changeDescriptorState(wchar ? Descriptor.audioUTOC4TD : Descriptor.audioUTOC1TD, DescriptorAction.openRead);
         const query = formatQuery('1806 022018%b %w 3000 0a00 ff00 00000000', wcharValue, track);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1806 022018%? %?%? %?%? %?%? 1000 00%?0000 00%?000a %x');
+        await this.changeDescriptorState(wchar ? Descriptor.audioUTOC4TD : Descriptor.audioUTOC1TD, DescriptorAction.close);
         return decodeFromSJIS(res[0] as Uint8Array);
     }
 
@@ -531,22 +647,20 @@ export class NetMDInterface {
         }
         if (this.netMd.getVendor() == 0x04dd) {
             // Sharp disc rename (Issue #67 of webminidisc)
-            await this.sendHandshake('180810 1802 0300');
+            await this.changeDescriptorState(Descriptor.audioUTOC1TD, DescriptorAction.openWrite);
         } else {
-            await this.sendHandshake('180810 1801 0100');
-            await this.sendHandshake('180810 1801 0000');
-            await this.sendHandshake('180810 1801 0300');
+            await this.changeDescriptorState(Descriptor.discTitleTD, DescriptorAction.close);
+            await this.changeDescriptorState(Descriptor.discTitleTD, DescriptorAction.openWrite);
         }
         const query = formatQuery('1807 02201801 00%b 3000 0a00 5000 %w 0000 %w %*', wcharValue, newLength, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 02201801 00%? 3000 0a00 5000 %?%? 0000 %?%?');
         if (this.netMd.getVendor() == 0x04dd) {
-            await this.sendHandshake('180810 1802 0000');
+            await this.changeDescriptorState(Descriptor.audioUTOC1TD, DescriptorAction.close);
         } else {
-            //await this.sendHandshake('180810 1801 0000');
-            await this.sendHandshake('180810 1801 0100');
-            await this.sendHandshake('180810 1801 0000');
-            await this.sendHandshake('180810 1801 0300');
+            await this.changeDescriptorState(Descriptor.discTitleTD, DescriptorAction.close);
+            await this.changeDescriptorState(Descriptor.discTitleTD, DescriptorAction.openRead);
+            await this.changeDescriptorState(Descriptor.discTitleTD, DescriptorAction.close);
         }
     }
 
@@ -574,10 +688,11 @@ export class NetMDInterface {
             }
         }
 
-        await this.sendQuery(formatQuery('180810 18%b 0300', wcharValue)); //cacheTOC?
+        await this.changeDescriptorState(wchar ? Descriptor.audioUTOC4TD : Descriptor.audioUTOC1TD, DescriptorAction.openWrite);
         const query = formatQuery('1807 022018%b %w 3000 0a00 5000 %w 0000 %w %*', wcharValue, track, newLen, oldLen, encodeToSJIS(title));
         const reply = await this.sendQuery(query);
         scanQuery(reply, '1807 022018%? %?%? 3000 0a00 5000 %?%? 0000 %?%?');
+        await this.changeDescriptorState(wchar ? Descriptor.audioUTOC4TD : Descriptor.audioUTOC1TD, DescriptorAction.close);
     }
 
     async eraseTrack(track: number) {
@@ -587,17 +702,17 @@ export class NetMDInterface {
     }
 
     async moveTrack(source: number, dest: number) {
-        await this.sendHandshake('180810 1001 0000');
         const query = formatQuery('1843 ff00 00 201001 %w 201001 %w', source, dest);
         const reply = await this.sendQuery(query);
         // scanQuery(reply, '1843 0000 00 201001 00 %?%? 201001 %?%?');
     }
 
     async _getTrackInfo(track: number, p1: number, p2: number) {
-        await this.sendHandshake('180810 1001 0100');
+        await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.openRead);
         const query = formatQuery('1806 02201001 %w %w %w ff00 00000000', track, p1, p2);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1806 02201001 %?%? %?%? %?%? 1000 00%?0000 %x');
+        await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.close);
         return String.fromCharCode(...(res[0] as Uint8Array));
     }
 
@@ -620,14 +735,16 @@ export class NetMDInterface {
     }
 
     async getTrackFlags(track: number) {
+        await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.openRead);
         const query = formatQuery('1806 01201001 %w ff00 00010008', track);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1806 01201001 %?%? 10 00 00010008 %b')[0] as JSBI;
+        await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.close);
         return JSBI.toNumber(res);
     }
 
     async getDiscCapacity() {
-        await this.sendHandshake('180810 1000 0100');
+        await this.changeDescriptorState(Descriptor.rootTD, DescriptorAction.openRead);
         const query = formatQuery('1806 02101000 3080 0300 ff00 00000000');
         const reply = await this.sendQuery(query);
         let result: number[][] = [];
@@ -646,13 +763,16 @@ export class NetMDInterface {
             ];
             result.push(tmp);
         }
+        await this.changeDescriptorState(Descriptor.rootTD, DescriptorAction.close);
         return result;
     }
 
     async getRecordingParameters() {
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.openRead);
         const query = formatQuery('1809 8001 0330 8801 0030 8805 0030 8807 00 ff00 00000000');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1809 8001 0330 8801 0030 8805 0030 8807 00 1000 000e0000 000c 8805 0008 80e0 0110 %b %b 4000');
+        await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.close);
         return res.map(i => JSBI.toNumber(i as JSBI));
     }
 
@@ -660,7 +780,7 @@ export class NetMDInterface {
         // This can only be executed on an MZ-RH1 / M200
         const query = formatQuery('1800 080046 f003010330 ff00 1001 %w', track + 1);
         const reply = await this.sendQuery(query, false, true);
-        const [frames, codec, length] = scanQuery(reply, '1800 080046 f003010330 0000 1001 %w %b %d');
+        const [frames, codec, length] = scanQuery(reply, '1800 080046 f0030103 300000 1001 %w %b %d');
         const result = await this.netMd.readBulk(length as number, 0x10000, callback);
         scanQuery(await this.readReply(), '1800 080046 f003010330 0000 1001 %?%? 00%?'); //The last byte is some kind of error counter.
         await sleep(500);
@@ -1082,7 +1202,7 @@ export class MDSession {
         if (!this.hexSessionKey) {
             throw new Error(`Call init first!`);
         }
-        await this.md.syncTOC();
+
         await this.md.setupDownload(trk.getContentID(), trk.getKEK(), this.hexSessionKey);
         let dataFormat = trk.getDataFormat();
         let [track, uuid, ccid] = await this.md.sendTrack(
@@ -1094,16 +1214,11 @@ export class MDSession {
             this.hexSessionKey!,
             progressCallback
         );
-        await this.md.cacheTOC();
         await this.md.setTrackTitle(track, trk.title);
         if (trk.fullWidthTitle) {
             await this.md.setTrackTitle(track, trk.fullWidthTitle, true);
         }
-        await this.md.syncTOC();
         await this.md.commitTrack(track, this.hexSessionKey);
-        await this.md.sendHandshake('180810 1801 0100');
-        await this.md.sendHandshake('180810 1801 0000');
-        await this.md.sendHandshake('180810 1801 0300');
         return [track, uuid, ccid];
     }
 
