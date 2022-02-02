@@ -16,12 +16,15 @@ import {
     EncodingName,
     Flag,
     ChannelName,
+    upload,
 } from './netmd-commands';
 import { MDTrack, Wireformat } from './netmd-interface';
 import { pad, formatTimeFromFrames, sanitizeTrackTitle, sleep } from './utils';
 import { makeGetAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker';
 import { Worker } from 'worker_threads';
 import readline from 'readline';
+import { DiscFormat } from '.';
+import { formatQuery } from './query-utils';
 
 async function main() {
     async function openDeviceOrExit(usb: USB) {
@@ -105,7 +108,7 @@ async function main() {
             yargs => {
                 return yargs.positional('command', {
                     alias: 'c',
-                    choices: ['play', 'stop', 'next', 'prev'],
+                    choices: ['play', 'stop', 'next', 'prev', 'eject'],
                 });
             },
             async argv => {
@@ -124,9 +127,51 @@ async function main() {
                     case 'prev':
                         await netmdInterface.previousTrack();
                         break;
+                    case 'eject':
+                        await netmdInterface.ejectDisc();
+                        break;
                     default:
                         throw new Error(`Unexpected command ${command}`);
                 }
+            }
+        )
+        .command(
+            'goto [track]',
+            'go to specific track',
+            yargs => {
+                return yargs.positional('track', {
+                    alias: 't',
+                    type: 'number',
+                    demandOption: true,
+                });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                await netmdInterface.gotoTrack(argv.track);
+            }
+        )
+        .command(
+            'll [command]',
+            'send low level command to device',
+            yargs => {
+                return yargs.positional('command', {
+                    type: 'string',
+                    alias: 'c',
+                    demandOption: true,
+                });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                console.log(await netmdInterface.sendQuery(formatQuery(argv.command as string)));
+            }
+        )
+        .command(
+            'wipe',
+            'erase the disc',
+            yargs => {},
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                await netmdInterface.eraseDisc();
             }
         )
         .command(
@@ -213,6 +258,38 @@ async function main() {
             }
         )
         .command(
+            'download [track_number] [outputfile]',
+            'download song from player to the PC. Track indexes start from 0. Only applicable to MZ-RH1 / MZ-M200',
+            yargs => {
+                return yargs
+                    .positional('track_number', {
+                        describe: 'track index',
+                        type: 'number',
+                        demandOption: true,
+                    })
+                    .positional('outputfile', {
+                        describe: 'output file',
+                        type: 'string',
+                        demandOption: false,
+                    });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+
+                const [format, data] = await upload(netmdInterface, argv.track_number, ({ readBytes, totalBytes }) => {
+                    console.log(`Reading ${readBytes} / ${totalBytes}`);
+                });
+
+                const outfile =
+                    argv.outputfile ||
+                    `${await netmdInterface.getTrackTitle(argv.track_number)}.${
+                        [DiscFormat.lp2, DiscFormat.lp4].includes(format) ? 'wav' : 'aea'
+                    }`;
+
+                fs.writeFileSync(outfile, data);
+            }
+        )
+        .command(
             'rename [track_number] [title]',
             'set track title. Track indexes start from 0',
             yargs => {
@@ -237,9 +314,7 @@ async function main() {
             },
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
-                await netmdInterface.cacheTOC();
                 await netmdInterface.setTrackTitle(argv.track_number, argv.title, argv.full_width);
-                await netmdInterface.syncTOC();
             }
         )
         .command(
@@ -260,9 +335,7 @@ async function main() {
             },
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
-                await netmdInterface.cacheTOC();
                 await netmdInterface.moveTrack(argv.src_track_number, argv.dst_track_number);
-                await netmdInterface.syncTOC();
             }
         )
         .option('verbose', {

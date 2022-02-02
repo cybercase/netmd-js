@@ -2,8 +2,19 @@ import fs from 'fs';
 
 import { NetMD, DevicesIds } from './netmd';
 import { NetMDInterface, Encoding, Channels, TrackFlag, DiscFlag, MDTrack, MDSession, EKBOpenSource, Wireformat } from './netmd-interface';
-import { timeToFrames } from './utils';
+import {
+    timeToFrames,
+    sanitizeHalfWidthTitle,
+    sanitizeFullWidthTitle,
+    sleep,
+    createAeaHeader,
+    createWavHeader,
+    concatUint8Arrays,
+    getHalfWidthTitleLength,
+    halfWidthToFullWidthRange,
+} from './utils';
 import { Logger } from './logger';
+import { Descriptor, DescriptorAction, DiscFormat } from '.';
 
 export const EncodingName: { [k: number]: string } = {
     [Encoding.sp]: 'sp',
@@ -106,6 +117,7 @@ const OperatingStatus = {
     49999: 'rewind',
     65315: 'readingTOC',
     65296: 'noDisc',
+    65535: 'discBlank',
 } as const;
 type OperatingStatusType = typeof OperatingStatus[keyof typeof OperatingStatus] | 'unknown';
 
@@ -140,7 +152,7 @@ export async function getDeviceStatus(mdIface: NetMDInterface): Promise<DeviceSt
         : null;
 
     return {
-        discPresent,
+        discPresent: discPresent && !['readingTOC', 'noDisc'].includes(state),
         state,
         track,
         time,
@@ -217,11 +229,184 @@ export async function listContent(mdIface: NetMDInterface) {
     return disc;
 }
 
+const fixLength = (len: number) => Math.ceil(len / 7);
+
+export function getCellsForTitle(trk: Track) {
+    // Sometimes 'LP: ' is added to track names even if the title is '' (+1 cell)
+    return Math.max(1, fixLength((trk.fullWidthTitle?.length ?? 0) * 2)) + Math.max(1, fixLength(getHalfWidthTitleLength(trk.title ?? '')));
+}
+
+export function getRemainingCharactersForTitles(disc: Disc, includeGroups?: boolean) {
+    const cellLimit = 255;
+    // see https://www.minidisc.org/md_toc.html
+
+    let groups = disc.groups.filter(n => n.title !== null);
+
+    // Assume worst-case scenario
+    let fwTitle = disc.fullWidthTitle + `0;//`;
+    let hwTitle = disc.title + `0;//`;
+    if (includeGroups || includeGroups === undefined)
+        for (let group of groups) {
+            let range = `${group.tracks[0].index + 1}${group.tracks.length - 1 !== 0 &&
+                `-${group.tracks[group.tracks.length - 1].index + 1}`}//`;
+            // The order of these characters doesn't matter. It's for length only
+            fwTitle += group.fullWidthTitle + range;
+            hwTitle += group.title + range;
+        }
+
+    let usedCells = 0;
+    usedCells += fixLength(fwTitle.length * 2);
+    usedCells += fixLength(getHalfWidthTitleLength(hwTitle));
+    for (let trk of getTracks(disc)) {
+        usedCells += getCellsForTitle(trk);
+    }
+    return Math.max(cellLimit - usedCells, 0) * 7;
+}
+
+export function compileDiscTitles(disc: Disc) {
+    let availableCharactersForTitle = getRemainingCharactersForTitles(
+        {
+            ...disc,
+            title: '',
+            fullWidthTitle: '',
+        },
+        false
+    );
+    // If the disc or any of the groups, or any track has a full-width title, provide support for them
+    const useFullWidth =
+        disc.fullWidthTitle ||
+        disc.groups.filter(n => !!n.fullWidthTitle).length > 0 ||
+        disc.groups
+            .map(n => n.tracks)
+            .reduce((a, b) => a.concat(b), [])
+            .filter(n => !!n.fullWidthTitle).length > 0;
+
+    let newRawTitle = '',
+        newRawFullWidthTitle = '';
+    if (disc.title) newRawTitle = `0;${disc.title}//`;
+    if (useFullWidth) newRawFullWidthTitle = `０；${disc.fullWidthTitle}／／`;
+    for (let n of disc.groups) {
+        if (n.title === null || n.tracks.length === 0) continue;
+        let range = `${n.tracks[0].index + 1}`;
+        if (n.tracks.length !== 1) {
+            // Special case
+            range += `-${n.tracks[0].index + n.tracks.length}`;
+        }
+
+        let newRawTitleAfterGroup = newRawTitle + `${range};${n.title}//`,
+            newRawFullWidthTitleAfterGroup = newRawFullWidthTitle + halfWidthToFullWidthRange(range) + `；${n.fullWidthTitle ?? ''}／／`;
+
+        let titlesLengthInTOC = fixLength(getHalfWidthTitleLength(newRawTitleAfterGroup)) * 7;
+
+        if (useFullWidth) titlesLengthInTOC += fixLength(newRawFullWidthTitleAfterGroup.length * 2) * 7;
+
+        if (availableCharactersForTitle - titlesLengthInTOC < 0) break;
+
+        newRawTitle = newRawTitleAfterGroup;
+        newRawFullWidthTitle = newRawFullWidthTitleAfterGroup;
+    }
+
+    let titlesLengthInTOC = fixLength(getHalfWidthTitleLength(newRawTitle)) * 7;
+    if (useFullWidth) titlesLengthInTOC += fixLength(newRawFullWidthTitle.length * 2); // If this check fails the titles without the groups already take too much space, don't change anything
+    if (availableCharactersForTitle - titlesLengthInTOC < 0) {
+        return null;
+    }
+
+    return {
+        newRawTitle,
+        newRawFullWidthTitle: useFullWidth ? newRawFullWidthTitle : '',
+    };
+}
+
+export async function rewriteDiscGroups(mdIface: NetMDInterface, disc: Disc) {
+    const compiled = compileDiscTitles(disc);
+    if (!compiled) return;
+    const { newRawTitle, newRawFullWidthTitle } = compiled;
+    await mdIface.setDiscTitle(newRawTitle);
+    await mdIface.setDiscTitle(newRawFullWidthTitle, true);
+}
+
+export async function renameDisc(mdIface: NetMDInterface, newName: string, newFullWidthName?: string) {
+    newName = sanitizeHalfWidthTitle(newName);
+    newFullWidthName = newFullWidthName !== undefined ? sanitizeFullWidthTitle(newFullWidthName) : undefined;
+
+    const oldName = await mdIface.getDiscTitle();
+    const oldFullWidthName = await mdIface.getDiscTitle(true);
+    const oldRawName = await mdIface._getDiscTitle();
+    const oldRawFullWidthName = await mdIface._getDiscTitle(true);
+    const hasGroups = oldRawName.indexOf('//') >= 0;
+    const hasFullWidthGroups = oldRawName.indexOf('／／') >= 0;
+    const hasGroupsAndTitle = oldRawName.startsWith('0;');
+    const hasFullWidthGroupsAndTitle = oldRawName.startsWith('０；');
+
+    if (newFullWidthName !== oldFullWidthName && newFullWidthName !== undefined) {
+        let newFullWidthNameWithGroups;
+        if (hasFullWidthGroups) {
+            if (hasFullWidthGroupsAndTitle) {
+                newFullWidthNameWithGroups = oldRawFullWidthName.replace(
+                    /^０；.*?／／/,
+                    newFullWidthName !== '' ? `０；${newFullWidthName}／／` : ``
+                );
+            } else {
+                newFullWidthNameWithGroups = `０；${newFullWidthName}／／${oldRawFullWidthName}`; // Add the new title
+            }
+        } else {
+            newFullWidthNameWithGroups = newFullWidthName;
+        }
+        await mdIface.setDiscTitle(newFullWidthNameWithGroups, true);
+    }
+
+    if (newName === oldName) {
+        return;
+    }
+
+    let newNameWithGroups;
+
+    if (hasGroups) {
+        if (hasGroupsAndTitle) {
+            newNameWithGroups = oldRawName.replace(/^0;.*?\/\//, newName !== '' ? `0;${newName}//` : ``); // Replace or delete the old title
+        } else {
+            newNameWithGroups = `0;${newName}//${oldRawName}`; // Add the new title
+        }
+    } else {
+        newNameWithGroups = newName;
+    }
+
+    await mdIface.setDiscTitle(newNameWithGroups);
+}
+
+export async function upload(
+    mdIface: NetMDInterface,
+    track: number,
+    progressCallback?: (progress: { readBytes: number; totalBytes: number }) => void
+): Promise<[DiscFormat, Uint8Array]> {
+    const [format, frames, result] = await mdIface.saveTrackToArray(track, (l, r) => {
+        progressCallback && progressCallback({ totalBytes: l, readBytes: r });
+    });
+    let header;
+    switch (format) {
+        case DiscFormat.spStereo:
+        case DiscFormat.spMono:
+            header = createAeaHeader(await mdIface.getTrackTitle(track), format === DiscFormat.spStereo ? 2 : 1, frames);
+            break;
+        case DiscFormat.lp2:
+        case DiscFormat.lp4:
+            header = createWavHeader(format, result.length);
+            break;
+    }
+    return [format, concatUint8Arrays(header, result)];
+}
+
 export async function download(
     mdIface: NetMDInterface,
     track: MDTrack,
     progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void
 ) {
+    // Sometimes netmd-js sends the setupDownload command prematurely, causing it to be rejected.
+    // Wait for the device to be ready before sending the (next) track.
+    while (!['ready', 'discBlank'].includes((await getDeviceStatus(mdIface)).state)) {
+        await sleep(200);
+    }
     try {
         await mdIface.sessionKeyForget();
         await mdIface.leaveSecureSession();
