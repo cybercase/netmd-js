@@ -252,7 +252,7 @@ export class NetMDInterface {
         try {
             await this.sendQuery(formatQuery(`1808 ${descriptor} ${action} 00`));
         } catch (ex) {
-            this.logger?.error({ method: 'sendHandshake', error: ex, descriptor, action });
+            this.logger?.error({ method: 'changeDescriptorState', error: ex, descriptor, action });
         }
     }
 
@@ -261,14 +261,19 @@ export class NetMDInterface {
         return this.readReply(acceptInterim);
     }
 
-    async sendCommand(query: ArrayBuffer, test = false) {
+    async sendFactoryQuery(query: ArrayBuffer, test = false, acceptInterim = false) {
+        await this.sendCommand(query, test, true);
+        return this.readReply(acceptInterim, true);
+    }
+
+    async sendCommand(query: ArrayBuffer, test = false, factory = false) {
         let statusByte: ArrayBuffer;
         if (test) {
             statusByte = new Uint8Array([Status.specificInquiry]).buffer;
         } else {
             statusByte = new Uint8Array([Status.control]).buffer;
         }
-        this.netMd.sendCommand(concatArrayBuffers(statusByte, query));
+        this.netMd.sendCommand(concatArrayBuffers(statusByte, query), factory);
     }
 
     async waitForSync() {
@@ -293,11 +298,11 @@ export class NetMDInterface {
         return currentAttempt < NetMDInterface.maxSyncAttempts;
     }
 
-    async readReply(acceptInterim = false) {
+    async readReply(acceptInterim = false, factory = false) {
         let currentAttempt = 0;
         let data: DataView | undefined;
         while (currentAttempt < NetMDInterface.maxInterimReadAttempts) {
-            ({ data } = await this.netMd.readReply());
+            ({ data } = await this.netMd.readReply(factory));
             if (data === undefined) {
                 throw new Error('unexpected undefined value in readReply');
             }
@@ -490,9 +495,11 @@ export class NetMDInterface {
     }
 
     async getDiscFlags() {
+        await this.changeDescriptorState(Descriptor.rootTD, DescriptorAction.openRead);
         const query = formatQuery('1806 01101000 ff00 0001000b');
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1806 01101000 1000 0001000b %b');
+        await this.changeDescriptorState(Descriptor.rootTD, DescriptorAction.close);
         return JSBI.toNumber(res[0] as JSBI);
     }
 
@@ -512,6 +519,7 @@ export class NetMDInterface {
 
     async _getDiscTitle(wchar = false) {
         await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.openRead);
+        await this.changeDescriptorState(Descriptor.discTitleTD, DescriptorAction.openRead);
         let wcharValue;
         if (wchar) {
             wcharValue = 1;
@@ -544,6 +552,7 @@ export class NetMDInterface {
         }
         let res = result.join('');
         this.logger?.debug({ method: `_getDiscTitle`, result: res });
+        await this.changeDescriptorState(Descriptor.discTitleTD, DescriptorAction.close);
         await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.close);
         return res;
     }
