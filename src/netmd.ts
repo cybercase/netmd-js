@@ -117,13 +117,18 @@ export class NetMD {
         return { len, data: result.data };
     }
 
-    public async sendCommand(command: BufferSource) {
+    public async sendCommand(command: BufferSource, useFactoryCommand: boolean = false) {
+        // An entirely new command set has been discovered - the factory command set
+        // Used for reading and writing player's internal memory.
+        // Not all commands have been discovered yet.
+        //
+        // DON'T USE THE FACTORY COMMANDS IF YOU DON'T KNOW WHAT YOU'RE DOING
         this.logger?.debug({ action: 'sendCommand', command: inspect(command) });
         await this.device.controlTransferOut(
             {
                 requestType: 'vendor',
                 recipient: 'interface',
-                request: 0x80,
+                request: useFactoryCommand ? 0xff : 0x80,
                 value: 0,
                 index: 0,
             },
@@ -131,7 +136,7 @@ export class NetMD {
         );
     }
 
-    public async readReply() {
+    public async readReply(useFactoryCommand: boolean = false) {
         let { len } = await this.getReplyLength();
         let i = 0;
         while (len === 0) {
@@ -144,7 +149,7 @@ export class NetMD {
             {
                 requestType: 'vendor',
                 recipient: 'interface',
-                request: 0x81,
+                request: useFactoryCommand ? 0xff : 0x81,
                 value: 0,
                 index: 0,
             },
