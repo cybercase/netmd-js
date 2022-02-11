@@ -136,7 +136,7 @@ export async function getDeviceStatus(mdIface: NetMDInterface): Promise<DeviceSt
     const position = await mdIface.getPosition();
 
     const track = position ? position[0] : null;
-    const discPresent = status[4] === 0x40;
+    const discPresent = status[4] !== 0x80;
     let state: OperatingStatusType =
         operatingStatus in OperatingStatus ? OperatingStatus[operatingStatus as keyof typeof OperatingStatus] : 'unknown';
     if (state === 'playing' && !discPresent) {
