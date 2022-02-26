@@ -14,7 +14,7 @@ export const DevicesIds = [
     { vendorId: 0x054c, deviceId: 0x0075, name: 'Sony MZ-N1' },
     { vendorId: 0x054c, deviceId: 0x007c, name: 'Sony' },
     { vendorId: 0x054c, deviceId: 0x0080, name: 'Sony LAM-1' },
-    { vendorId: 0x054c, deviceId: 0x0081, name: 'Sony MDS-JB980' },
+    { vendorId: 0x054c, deviceId: 0x0081, name: 'Sony MDS-JB980/MDS-NT1' },
     { vendorId: 0x054c, deviceId: 0x0084, name: 'Sony MZ-N505' },
     { vendorId: 0x054c, deviceId: 0x0085, name: 'Sony MZ-S1' },
     { vendorId: 0x054c, deviceId: 0x0086, name: 'Sony MZ-N707' },
@@ -26,6 +26,7 @@ export const DevicesIds = [
     { vendorId: 0x054c, deviceId: 0x00c8, name: 'Sony MZ-N710/NF810' },
     { vendorId: 0x054c, deviceId: 0x00c9, name: 'Sony MZ-N510/N610' },
     { vendorId: 0x054c, deviceId: 0x00ca, name: 'Sony MZ-NE410/NF520D' },
+    { vendorId: 0x054c, deviceId: 0x00e7, name: 'Sony CMT-M333NT/M373NT' },
     { vendorId: 0x054c, deviceId: 0x00eb, name: 'Sony MZ-NE810/NE910' },
     { vendorId: 0x054c, deviceId: 0x0101, name: 'Sony LAM' }, //They all report the same VID/PID
     { vendorId: 0x054c, deviceId: 0x0113, name: 'Aiwa AM-NX1' },
