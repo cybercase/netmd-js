@@ -311,7 +311,7 @@ export class NetMDInterface {
             if (status === Status.notImplemented) {
                 throw new NetMDNotImplemented('Not implemented');
             } else if (status === Status.rejected) {
-                throw new NetMDRejected('Rejected');
+                throw new NetMDRejected(`Rejected - ${[...new Uint8Array(data.buffer)].map(n => n.toString(16).padStart(2, '0')).join('')}`);
             } else if (status === Status.interim && !acceptInterim) {
                 await sleep(NetMDInterface.interimResponseRetryIntervalInMs * (Math.pow(2, currentAttempt) - 1));
                 currentAttempt += 1;
@@ -859,7 +859,7 @@ export class NetMDInterface {
         }
         const query = formatQuery('1800 080046 f0030103 20 ff 000000 %*', hostnonce);
         const reply = await this.sendQuery(query);
-        return scanQuery(reply, '1800 080046 f0030103 20 00 000000 %#')[0] as Uint8Array;
+        return scanQuery(reply, '1800 080046 f0030103 20 %? 000000 %#')[0] as Uint8Array; // '20 00' => '20 %?' - Fix for Panasonic SJ-MR270
     }
 
     async sessionKeyForget() {
