@@ -507,14 +507,11 @@ export class NetMDInterface {
         await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.openRead);
         const query = formatQuery('1806 02101001 3000 1000 ff00 00000000');
         const reply = await this.sendQuery(query);
-        let res1 = scanQuery(reply, '1806 02101001 %?%? %?%? 1000 00%?0000 %x');
-        let data = String.fromCharCode(...(res1[0] as Uint8Array));
-        assert(data.length === 6, `Expected length === 6 for data`);
-        assert(data.substring(0, 5) === `\x00\x10\x00\x02\x00`, `Wrong header in data response`);
-        let res2 = data.charCodeAt(5);
-        this.logger?.debug({ method: `getTrackCount`, result: res2 });
+        let res = scanQuery(reply, '1806 02101001 %?%? %?%? 1000 00%?0000 0006 0010000200%b');
+        let trackCount = JSBI.toNumber(res[0] as JSBI);
+        this.logger?.debug({ method: `getTrackCount`, result: trackCount });
         await this.changeDescriptorState(Descriptor.audioContentsTD, DescriptorAction.close);
-        return res2;
+        return trackCount;
     }
 
     async _getDiscTitle(wchar = false) {
