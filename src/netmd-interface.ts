@@ -757,13 +757,13 @@ export class NetMDInterface {
         const query = formatQuery('1806 02101000 3080 0300 ff00 00000000');
         const reply = await this.sendQuery(query);
         let result: number[][] = [];
-        // 8003 changed to %b03 - Panasonic returns 0803 instead. This byte's meaning is unknown
+        // 8003 changed to %?03 - Panasonic returns 0803 instead. This byte's meaning is unknown
         let res = scanQuery(
             reply,
-            '1806 02101000 3080 0300 1000 001d0000 001b %b03 0017 8000 0005 %w %b %b %b 0005 %w %b %b %b 0005 %w %b %b %b'
+            '1806 02101000 3080 0300 1000 001d0000 001b %?03 0017 8000 0005 %w %b %b %b 0005 %w %b %b %b 0005 %w %b %b %b'
         );
         for (let i = 0; i < 3; i++) {
-            let offset = i * 4 + 1;
+            let offset = i * 4;
             let tmp: number[] = [
                 BCD2int(JSBI.toNumber(res[offset + 0] as JSBI)),
                 BCD2int(JSBI.toNumber(res[offset + 1] as JSBI)),
