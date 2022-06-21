@@ -1,6 +1,6 @@
 import { NetMD } from './netmd';
 import { Logger } from './logger';
-import { formatQuery, scanQuery, BCD2int, int2BCD } from './query-utils';
+import { formatQuery, scanQuery } from './query-utils';
 import {
     concatArrayBuffers,
     stringToCharCodeArray,
@@ -19,22 +19,8 @@ import {
 import JSBI from 'jsbi';
 import Crypto from 'crypto-js';
 
-enum Status {
-    // NetMD Protocol return status (first byte of request)
-    control = 0x00,
-    status = 0x01,
-    specificInquiry = 0x02,
-    notify = 0x03,
-    generalInquiry = 0x04,
-    //  ... (first byte of response)
-    notImplemented = 0x08,
-    accepted = 0x09,
-    rejected = 0x0a,
-    inTransition = 0x0b,
-    implemented = 0x0c,
-    changed = 0x0d,
-    interim = 0x0f,
-}
+import { NetMDError, NetMDNotImplemented, NetMDRejected, Status } from './netmd-shared-objects';
+import { NetMDFactoryInterface } from './factory/netmd-factory-interface';
 
 enum Action {
     play = 0x75,
@@ -121,27 +107,6 @@ export const FrameSize: { [k: number]: number } = {
     [Wireformat.lp4]: 96,
 };
 
-// https://github.com/Microsoft/TypeScript/wiki/Breaking-Changes#extending-built-ins-like-error-array-and-map-may-no-longer-work
-// I could have used the make-error library
-class NetMDError extends Error {
-    constructor(m: string) {
-        super(m);
-        Object.setPrototypeOf(this, NetMDError.prototype);
-    }
-}
-class NetMDNotImplemented extends NetMDError {
-    constructor(m: string) {
-        super(m);
-        Object.setPrototypeOf(this, NetMDNotImplemented.prototype);
-    }
-}
-class NetMDRejected extends NetMDError {
-    constructor(m: string) {
-        super(m);
-        Object.setPrototypeOf(this, NetMDRejected.prototype);
-    }
-}
-
 export class NetMDInterface {
     static maxSyncAttempts = 4;
     static syncRetryIntervalInMs = 100;
@@ -212,36 +177,17 @@ export class NetMDInterface {
         const manufacturerDepLength = constructMultibyte(2);
         const manufacturerDepData = buffer.slice(bufferOffset, bufferOffset + manufacturerDepLength);
 
-        console.log('-------------DEBUG-------------');
-        console.log(
-            JSON.stringify(
-                {
-                    descriptorLength,
-                    generationID,
-                    sizeOfListID,
-                    sizeOfObjectID,
-                    sizeOfObjectPosition,
-                    amtOfRootObjectLists,
-                    buffer: [...buffer],
-                    rootObjects,
-                    subunitDependentLength,
-                    subunitFieldsLength,
-                    attributes,
-                    discSubunitVersion,
-                    amtSupportedMediaTypes,
-                    supportedMediaTypeSpecifications,
-                    manufacturerDepLength,
-                    manufacturerDepData: [...manufacturerDepData],
-                },
-                null,
-                5
-            )
-        );
-        console.log('-------------DEBUG-------------');
-        this.changeDescriptorState(Descriptor.discSubunitIndentifier, DescriptorAction.close);
+        await this.changeDescriptorState(Descriptor.discSubunitIndentifier, DescriptorAction.close);
         return {
             netMDLevel: supportedMediaTypeSpecifications[0x301].implentationProfileID as NetMDLevel,
         };
+    }
+
+    async factory() {
+        await this._getDiscSubunitIdentifier();
+        const factoryIface = new NetMDFactoryInterface(this.netMd, this.logger);
+        await factoryIface.auth();
+        return factoryIface;
     }
 
     async getNetMDLevel() {
@@ -261,19 +207,14 @@ export class NetMDInterface {
         return this.readReply(acceptInterim);
     }
 
-    async sendFactoryQuery(query: ArrayBuffer, test = false, acceptInterim = false) {
-        await this.sendCommand(query, test, true);
-        return this.readReply(acceptInterim, true);
-    }
-
-    async sendCommand(query: ArrayBuffer, test = false, factory = false) {
+    async sendCommand(query: ArrayBuffer, test = false) {
         let statusByte: ArrayBuffer;
         if (test) {
             statusByte = new Uint8Array([Status.specificInquiry]).buffer;
         } else {
             statusByte = new Uint8Array([Status.control]).buffer;
         }
-        this.netMd.sendCommand(concatArrayBuffers(statusByte, query), factory);
+        await this.netMd.sendCommand(concatArrayBuffers(statusByte, query));
     }
 
     async waitForSync() {
@@ -298,11 +239,11 @@ export class NetMDInterface {
         return currentAttempt < NetMDInterface.maxSyncAttempts;
     }
 
-    async readReply(acceptInterim = false, factory = false) {
+    async readReply(acceptInterim = false) {
         let currentAttempt = 0;
         let data: DataView | undefined;
         while (currentAttempt < NetMDInterface.maxInterimReadAttempts) {
-            ({ data } = await this.netMd.readReply(factory));
+            ({ data } = await this.netMd.readReply());
             if (data === undefined) {
                 throw new Error('unexpected undefined value in readReply');
             }
@@ -311,7 +252,9 @@ export class NetMDInterface {
             if (status === Status.notImplemented) {
                 throw new NetMDNotImplemented('Not implemented');
             } else if (status === Status.rejected) {
-                throw new NetMDRejected(`Rejected - ${[...new Uint8Array(data.buffer)].map(n => n.toString(16).padStart(2, '0')).join('')}`);
+                throw new NetMDRejected(
+                    `Rejected - ${[...new Uint8Array(data.buffer)].map(n => n.toString(16).padStart(2, '0')).join('')}`
+                );
             } else if (status === Status.interim && !acceptInterim) {
                 await sleep(NetMDInterface.interimResponseRetryIntervalInMs * (Math.pow(2, currentAttempt) - 1));
                 currentAttempt += 1;
@@ -354,14 +297,22 @@ export class NetMDInterface {
         return status[4] === 0x40;
     }
 
-    async getOperatingStatus() {
+    async getFullOperatingStatus() {
         // WARNING: Does not work for all devices. See https://github.com/cybercase/webminidisc/issues/21
         await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.openRead);
         const query = formatQuery('1809 8001 0330 8802 0030 8805 0030 8806 00 ff00 00000000');
         const reply = await this.sendQuery(query);
-        let res = scanQuery(reply, '1809 8001 0330 8802 0030 8805 0030 8806 00 1000 00%?0000 0006 8806 0002 %w')[0] as JSBI;
+        let result = scanQuery(reply, '1809 8001 0330 8802 0030 8805 0030 8806 00 1000 00%?0000 00%b 8806 %x');
+        let operatingStatus = result[1] as Uint8Array;
+        let statusMode = JSBI.toNumber(result[0] as JSBI);
         await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.close);
-        return JSBI.toNumber(res);
+        if (operatingStatus.length < 2) throw new Error('Unparsable operating status');
+        let operatingStatusNumber = (operatingStatus[0] << 8) | operatingStatus[1];
+        return [statusMode, operatingStatusNumber];
+    }
+
+    async getOperatingStatus() {
+        return (await this.getFullOperatingStatus())[1];
     }
 
     async _getPlaybackStatus(p1: number, p2: number) {
@@ -396,15 +347,9 @@ export class NetMDInterface {
         }
         let result = scanQuery(
             reply,
-            `1809 8001 0430 %?%? %?%? %?%? ` + `%?%? %?%? %?%? %?%? %? %?00 00%?0000 ` + `000b 0002 0007 00 %w %b %b %b %b`
+            `1809 8001 0430 %?%? %?%? %?%? ` + `%?%? %?%? %?%? %?%? %? %?00 00%?0000 ` + `000b 0002 0007 00 %W %B %B %B %B`
         );
 
-        result[0] = JSBI.toNumber(result[0] as JSBI);
-
-        result[1] = BCD2int(JSBI.toNumber(result[1] as JSBI));
-        result[2] = BCD2int(JSBI.toNumber(result[2] as JSBI));
-        result[3] = BCD2int(JSBI.toNumber(result[3] as JSBI));
-        result[4] = BCD2int(JSBI.toNumber(result[4] as JSBI));
         await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.close);
 
         return result as number[];
@@ -464,7 +409,7 @@ export class NetMDInterface {
     }
 
     async gotoTime(track: number, hour = 0, minute = 0, second = 0, frame = 0) {
-        const query = formatQuery('1850 ff000000 0000 %w %b%b%b%b', track, int2BCD(hour), int2BCD(minute), int2BCD(second), int2BCD(frame));
+        const query = formatQuery('1850 ff000000 0000 %w %B%B%B%B', track, hour, minute, second, frame);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1850 00000000 %?%? %w %b%b%b%b');
         return res.map(j => JSBI.toNumber(j as JSBI));
@@ -727,12 +672,7 @@ export class NetMDInterface {
 
     async getTrackLength(track: number) {
         let rawValue = await this._getTrackInfo(track, 0x3000, 0x0100);
-        let result = scanQuery(stringToCharCodeArray(rawValue), '0001 0006 0000 %b %b %b %b');
-
-        result[0] = BCD2int(JSBI.toNumber(result[0] as JSBI));
-        result[1] = BCD2int(JSBI.toNumber(result[1] as JSBI));
-        result[2] = BCD2int(JSBI.toNumber(result[2] as JSBI));
-        result[3] = BCD2int(JSBI.toNumber(result[3] as JSBI));
+        let result = scanQuery(stringToCharCodeArray(rawValue), '0001 0006 0000 %B %B %B %B');
 
         return result as number[];
     }
@@ -757,19 +697,13 @@ export class NetMDInterface {
         const query = formatQuery('1806 02101000 3080 0300 ff00 00000000');
         const reply = await this.sendQuery(query);
         let result: number[][] = [];
-        // 8003 changed to %b03 - Panasonic returns 0803 instead. This byte's meaning is unknown
+        // 8003 changed to %?03 - Panasonic returns 0803 instead. This byte's meaning is unknown
         let res = scanQuery(
             reply,
-            '1806 02101000 3080 0300 1000 001d0000 001b %b03 0017 8000 0005 %w %b %b %b 0005 %w %b %b %b 0005 %w %b %b %b'
+            '1806 02101000 3080 0300 1000 001d0000 001b %?03 0017 8000 0005 %W %B %B %B 0005 %W %B %B %B 0005 %W %B %B %B'
         );
         for (let i = 0; i < 3; i++) {
-            let offset = i * 4 + 1;
-            let tmp: number[] = [
-                BCD2int(JSBI.toNumber(res[offset + 0] as JSBI)),
-                BCD2int(JSBI.toNumber(res[offset + 1] as JSBI)),
-                BCD2int(JSBI.toNumber(res[offset + 2] as JSBI)),
-                BCD2int(JSBI.toNumber(res[offset + 3] as JSBI)),
-            ];
+            let tmp: number[] = res.splice(0, 4) as number[];
             result.push(tmp);
         }
         await this.changeDescriptorState(Descriptor.rootTD, DescriptorAction.close);
@@ -918,7 +852,8 @@ export class NetMDInterface {
         pktSize: number,
         packets: AsyncIterable<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>,
         hexSessionKey: string,
-        progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void
+        progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void,
+        skipCheckForTOCEdit?: boolean
     ) {
         if (hexSessionKey.length !== 16) {
             throw new Error('Supplied Session Key length wrong');
@@ -926,11 +861,36 @@ export class NetMDInterface {
 
         const totalBytes = pktSize + 24; //framesizedict[wireformat] * frames + pktcount * 24;
 
+        let deviceMode;
+        try {
+            [deviceMode] = skipCheckForTOCEdit ? [null] : await this.getFullOperatingStatus();
+        } catch (err) {
+            throw new NetMDError('Error while checking for ToC Edit: ' + (err as any).toString());
+        }
+
         const query = formatQuery('1800 080046 f0030103 28 ff 000100 1001 ffff 00 %b %b %d %d', wireformat, discformat, frames, totalBytes);
         let reply = await this.sendQuery(query, false, true); // Accepts interim response
         scanQuery(reply, '1800 080046 f0030103 28 00 000100 1001 %?%? 00 %*');
 
         await this.waitForSync();
+
+        if (deviceMode != 6 && !skipCheckForTOCEdit) {
+            let triesToWaitOutTOCEdit = 0;
+            try {
+                for (let triesToWaitOutTOCEdit = 0; triesToWaitOutTOCEdit < 60; triesToWaitOutTOCEdit++) {
+                    const [mode, status] = await this.getFullOperatingStatus();
+                    await this.getStatus();
+                    if (status === 65319 || mode == 6) break;
+                    await sleep(500);
+                    this.logger?.debug({ method: `sendTrack`, result: 'ToC EDIT' });
+                }
+            } catch (err) {
+                throw new NetMDError('Error while checking for ToC Edit: ' + (err as any).toString());
+            }
+
+            if (triesToWaitOutTOCEdit === 60)
+                console.error("Warning: It looks like this device doesn't return correct TOC Editing state. Had to wait 30 seconds");
+        }
 
         const swapNeeded = !isBigEndian();
         let packetCount = 0;
@@ -975,6 +935,11 @@ export class NetMDInterface {
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1800 080046 f0030103 23 00 1001 %?%? %*');
         return String.fromCharCode(...(res[0] as Uint8Array));
+    }
+
+    async terminate() {
+        const query = formatQuery('1800 080046 f0030103 2a ff00');
+        await this.sendQuery(query);
     }
 }
 
@@ -1169,7 +1134,7 @@ export class MDTrack {
             const dataChunk = uint8DataArray.subarray(offset, offset + chunkSize);
             const dataChunkWA = Crypto.lib.WordArray.create(dataChunk) as any;
 
-            let encryptedChunk = Crypto.DES.encrypt(dataChunkWA, rawKeyWA, {
+            let encryptedChunk = Crypto.DES.encrypt(dataChunkWA, rawKeyWA as any, {
                 mode: Crypto.mode.CBC,
                 iv: ivWA,
             });
@@ -1214,15 +1179,41 @@ export class MDSession {
 
         await this.md.setupDownload(trk.getContentID(), trk.getKEK(), this.hexSessionKey);
         let dataFormat = trk.getDataFormat();
-        let [track, uuid, ccid] = await this.md.sendTrack(
+
+        const parameters: [
+            number,
+            number,
+            number,
+            number,
+            AsyncIterable<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>,
+            string,
+            ((progress: { writtenBytes: number; totalBytes: number }) => void)?,
+            boolean?
+        ] = [
             dataFormat,
             discforwire[dataFormat],
             trk.getFrameCount(),
             trk.getTotalSize(),
             trk.getPacketWorkerIterator(),
             this.hexSessionKey!,
-            progressCallback
-        );
+            progressCallback,
+        ];
+        let track, uuid, ccid;
+        try {
+            [track, uuid, ccid] = await this.md.sendTrack(...parameters);
+        } catch (error) {
+            if (error instanceof NetMDError && !(error instanceof NetMDRejected)) {
+                // The error occurred when checking for ToC Edit
+                console.error(error);
+                await this.md.terminate();
+                await this.md.setupDownload(trk.getContentID(), trk.getKEK(), this.hexSessionKey);
+                parameters.push(true); // skipTOCEditCheck
+                [track, uuid, ccid] = await this.md.sendTrack(...parameters);
+            } else {
+                throw error;
+            }
+        }
+
         await this.md.setTrackTitle(track, trk.title);
         if (trk.fullWidthTitle) {
             await this.md.setTrackTitle(track, trk.fullWidthTitle, true);

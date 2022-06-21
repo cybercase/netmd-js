@@ -1,5 +1,3 @@
-import fs from 'fs';
-
 import { NetMD, DevicesIds } from './netmd';
 import { NetMDInterface, Encoding, Channels, TrackFlag, DiscFlag, MDTrack, MDSession, EKBOpenSource, Wireformat } from './netmd-interface';
 import {
@@ -14,7 +12,7 @@ import {
     halfWidthToFullWidthRange,
 } from './utils';
 import { Logger } from './logger';
-import { Descriptor, DescriptorAction, DiscFormat } from '.';
+import { DiscFormat } from '.';
 
 export const EncodingName: { [k: number]: string } = {
     [Encoding.sp]: 'sp',
@@ -118,6 +116,8 @@ const OperatingStatus = {
     65315: 'readingTOC',
     65296: 'noDisc',
     65535: 'discBlank',
+
+    65319: 'readyForTransfer',
 } as const;
 type OperatingStatusType = typeof OperatingStatus[keyof typeof OperatingStatus] | 'unknown';
 
@@ -231,12 +231,18 @@ export async function listContent(mdIface: NetMDInterface) {
 
 const fixLength = (len: number) => Math.ceil(len / 7);
 
-export function getCellsForTitle(trk: Track) {
-    // Sometimes 'LP: ' is added to track names even if the title is '' (+1 cell)
-    return Math.max(1, fixLength((trk.fullWidthTitle?.length ?? 0) * 2)) + Math.max(1, fixLength(getHalfWidthTitleLength(trk.title ?? '')));
+export function getCellsForTitle(trk: Track): { halfWidth: number; fullWidth: number } {
+    // Sometimes 'LP: ' is added to track names even if the title is '' (+1 cell for non-sp tracks)
+    const encodingNameCorrection = trk.encoding === Encoding.sp ? 0 : 1;
+    const fullWidthLength = fixLength((trk.fullWidthTitle?.length ?? 0) * 2);
+    const halfWidthLength = fixLength(getHalfWidthTitleLength(trk.title ?? ''));
+    return {
+        halfWidth: Math.max(encodingNameCorrection, halfWidthLength),
+        fullWidth: Math.max(encodingNameCorrection, fullWidthLength),
+    };
 }
 
-export function getRemainingCharactersForTitles(disc: Disc, includeGroups?: boolean) {
+export function getRemainingCharactersForTitles(disc: Disc, includeGroups?: boolean): { halfWidth: number; fullWidth: number } {
     const cellLimit = 255;
     // see https://www.minidisc.org/md_toc.html
 
@@ -254,17 +260,24 @@ export function getRemainingCharactersForTitles(disc: Disc, includeGroups?: bool
             hwTitle += group.title + range;
         }
 
-    let usedCells = 0;
-    usedCells += fixLength(fwTitle.length * 2);
-    usedCells += fixLength(getHalfWidthTitleLength(hwTitle));
+    let usedHalfWidthCells = 0,
+        usedFullWidthCells = 0;
+
+    usedFullWidthCells += fixLength(fwTitle.length * 2);
+    usedHalfWidthCells += fixLength(getHalfWidthTitleLength(hwTitle));
     for (let trk of getTracks(disc)) {
-        usedCells += getCellsForTitle(trk);
+        let { halfWidth, fullWidth } = getCellsForTitle(trk);
+        usedHalfWidthCells += halfWidth;
+        usedFullWidthCells += fullWidth;
     }
-    return Math.max(cellLimit - usedCells, 0) * 7;
+    return {
+        halfWidth: Math.max(cellLimit - usedHalfWidthCells, 0) * 7,
+        fullWidth: Math.max(cellLimit - usedFullWidthCells, 0) * 7,
+    };
 }
 
 export function compileDiscTitles(disc: Disc) {
-    let availableCharactersForTitle = getRemainingCharactersForTitles(
+    let { fullWidth: availableFullWidth, halfWidth: availableHalfWidth } = getRemainingCharactersForTitles(
         {
             ...disc,
             title: '',
@@ -285,6 +298,7 @@ export function compileDiscTitles(disc: Disc) {
         newRawFullWidthTitle = '';
     if (disc.title) newRawTitle = `0;${disc.title}//`;
     if (useFullWidth) newRawFullWidthTitle = `０；${disc.fullWidthTitle}／／`;
+
     for (let n of disc.groups) {
         if (n.title === null || n.tracks.length === 0) continue;
         let range = `${n.tracks[0].index + 1}`;
@@ -296,20 +310,29 @@ export function compileDiscTitles(disc: Disc) {
         let newRawTitleAfterGroup = newRawTitle + `${range};${n.title}//`,
             newRawFullWidthTitleAfterGroup = newRawFullWidthTitle + halfWidthToFullWidthRange(range) + `；${n.fullWidthTitle ?? ''}／／`;
 
-        let titlesLengthInTOC = fixLength(getHalfWidthTitleLength(newRawTitleAfterGroup)) * 7;
+        let halfWidthTitlesLengthInTOC = fixLength(getHalfWidthTitleLength(newRawTitleAfterGroup)) * 7;
 
-        if (useFullWidth) titlesLengthInTOC += fixLength(newRawFullWidthTitleAfterGroup.length * 2) * 7;
+        if (useFullWidth) {
+            let fullWidthTitlesLengthInTOC = fixLength(newRawFullWidthTitleAfterGroup.length * 2) * 7;
+            if (availableFullWidth - fullWidthTitlesLengthInTOC >= 0) {
+                // Try to fit as many groups as possible.
+                newRawFullWidthTitle = newRawFullWidthTitleAfterGroup;
+            }
+        }
 
-        if (availableCharactersForTitle - titlesLengthInTOC < 0) break;
-
-        newRawTitle = newRawTitleAfterGroup;
-        newRawFullWidthTitle = newRawFullWidthTitleAfterGroup;
+        if (availableHalfWidth - halfWidthTitlesLengthInTOC >= 0) {
+            // Try to fit as many groups as possible.
+            newRawTitle = newRawTitleAfterGroup;
+        }
     }
 
-    let titlesLengthInTOC = fixLength(getHalfWidthTitleLength(newRawTitle)) * 7;
-    if (useFullWidth) titlesLengthInTOC += fixLength(newRawFullWidthTitle.length * 2); // If this check fails the titles without the groups already take too much space, don't change anything
-    if (availableCharactersForTitle - titlesLengthInTOC < 0) {
-        return null;
+    let halfWidthTitlesLengthInTOC = fixLength(getHalfWidthTitleLength(newRawTitle)) * 7;
+    let fullWidthTitlesLengthInTOC = fixLength(newRawFullWidthTitle.length * 2); // If this check fails the titles without the groups already take too much space, don't change anything
+    if (availableHalfWidth - halfWidthTitlesLengthInTOC < 0) {
+        newRawTitle = '';
+    }
+    if (availableFullWidth - fullWidthTitlesLengthInTOC < 0) {
+        newRawFullWidthTitle = '';
     }
 
     return {
@@ -397,11 +420,7 @@ export async function upload(
     return [format, concatUint8Arrays(header, result)];
 }
 
-export async function download(
-    mdIface: NetMDInterface,
-    track: MDTrack,
-    progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void
-) {
+export async function prepareDownload(mdIface: NetMDInterface) {
     // Sometimes netmd-js sends the setupDownload command prematurely, causing it to be rejected.
     // Wait for the device to be ready before sending the (next) track.
     while (!['ready', 'discBlank'].includes((await getDeviceStatus(mdIface)).state)) {
@@ -420,6 +439,14 @@ export async function download(
     } catch (err) {
         // Ignore. On Sharp devices this doesn't work anyway.
     }
+}
+
+export async function download(
+    mdIface: NetMDInterface,
+    track: MDTrack,
+    progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void
+) {
+    await prepareDownload(mdIface);
 
     const session = new MDSession(mdIface, new EKBOpenSource());
     await session.init();

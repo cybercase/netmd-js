@@ -119,12 +119,20 @@ export class NetMD {
         return { len, data: result.data };
     }
 
-    public async sendCommand(command: BufferSource, useFactoryCommand: boolean = false) {
+    public async sendCommand(command: BufferSource) {
+        return await this._sendCommand(command, false);
+    }
+
+    public async sendFactoryCommand(command: BufferSource) {
         // An entirely new command set has been discovered - the factory command set
-        // Used for reading and writing player's internal memory.
+        // It can be used for reading and writing player's internal RAM / EEPROM / disc cache peripheral.
         // Not all commands have been discovered yet.
         //
         // DON'T USE THE FACTORY COMMANDS IF YOU DON'T KNOW WHAT YOU'RE DOING
+        return await this._sendCommand(command, true);
+    }
+
+    async _sendCommand(command: BufferSource, useFactoryCommand: boolean) {
         this.logger?.debug({ action: 'sendCommand', command: inspect(command) });
         await this.device.controlTransferOut(
             {
@@ -138,13 +146,26 @@ export class NetMD {
         );
     }
 
-    public async readReply(useFactoryCommand: boolean = false) {
-        let { len } = await this.getReplyLength();
-        let i = 0;
-        while (len === 0) {
-            await sleep(NetMD.readReplyRetryIntervalInMsec * Math.pow(2, ~~(i / 10))); // Double wait time every 10 attempts
+    public async readFactoryReply(overrideLength: number = -1) {
+        return await this._readReply(true, overrideLength);
+    }
+
+    public async readReply(overrideLength: number = -1) {
+        return await this._readReply(false, overrideLength);
+    }
+
+    private async _readReply(useFactoryCommand: boolean, overrideLength: number = -1) {
+        let len;
+        if (overrideLength === -1) {
             ({ len } = await this.getReplyLength());
-            i++;
+            let i = 0;
+            while (len === 0) {
+                await sleep(NetMD.readReplyRetryIntervalInMsec * Math.pow(2, ~~(i / 10))); // Double wait time every 10 attempts
+                ({ len } = await this.getReplyLength());
+                i++;
+            }
+        } else {
+            len = overrideLength;
         }
 
         let result = await this.device.controlTransferIn(

@@ -1,7 +1,8 @@
 /* A bunch of utils. Some might be unused */
 import { Buffer } from 'buffer';
 import jconv from 'jconv';
-import { Disc, DiscFormat, Track } from '.';
+import { DiscFormat } from './netmd-interface';
+import Crypto from 'crypto-js';
 
 export async function sleep(msec: number) {
     await new Promise(resolve => setTimeout(resolve, msec));
@@ -376,8 +377,8 @@ export function createWavHeader(format: DiscFormat, bytes: number) {
         new Uint8Array(wordToByteArray(bytes + 60, 4, true)),
         Buffer.from('WAVEfmt '),
         new Uint8Array(wordToByteArray(32, 4, true)),
-        new Uint8Array(wordToByteArray(0x270, 2, true)),
-        new Uint8Array(wordToByteArray(2, 2, true)),
+        new Uint8Array(wordToByteArray(0x270, 2, true)), // ATRAC3
+        new Uint8Array(wordToByteArray(2, 2, true)), // Stereo
         new Uint8Array(wordToByteArray(44100, 4, true)),
         new Uint8Array(wordToByteArray(bytesPerSecond, 4, true)),
         new Uint8Array(wordToByteArray(bytesPerFrame * 2, 2, true)),
@@ -393,4 +394,30 @@ export function createWavHeader(format: DiscFormat, bytes: number) {
         Buffer.from('data'),
         new Uint8Array(wordToByteArray(bytes, 4, true))
     );
+}
+
+export function encryptDataForFactoryTransfer(plaintext: Uint8Array) {
+    const factoryKey = new Uint8Array([0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]);
+    const iv = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
+
+    const dataWA = Crypto.lib.WordArray.create(plaintext) as any;
+    const keyWA = Crypto.lib.WordArray.create(factoryKey) as any;
+    const ivWA = Crypto.lib.WordArray.create(iv) as any;
+
+    const ciphertext = Crypto.DES.encrypt(dataWA, keyWA, { mode: Crypto.mode.ECB, iv: ivWA });
+    let ciphertextArray = wordArrayToByteArray(ciphertext.ciphertext);
+    return ciphertextArray.subarray(0, ciphertextArray.length - 8);
+}
+
+export function decryptDataFromFactoryTransfer(ciphertext: Uint8Array) {
+    const factoryKey = new Uint8Array([0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]);
+    const iv = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
+
+    const ciphertextWA = Crypto.lib.WordArray.create(ciphertext) as any;
+    const keyWA = Crypto.lib.WordArray.create(factoryKey) as any;
+    const ivWA = Crypto.lib.WordArray.create(iv) as any;
+
+    const plaintext = Crypto.DES.decrypt({ ciphertext: ciphertextWA } as any, keyWA, { mode: Crypto.mode.ECB, iv: ivWA });
+    (plaintext as any).sigBytes = ciphertext.length;
+    return wordArrayToByteArray(plaintext);
 }
