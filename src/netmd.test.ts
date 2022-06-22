@@ -1,4 +1,4 @@
-import { usb } from 'webusb';
+import { webusb as usb } from 'usb';
 import { NetMD } from './netmd';
 import { ConsoleLogger } from './logger';
 

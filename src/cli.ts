@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import yargs from 'yargs';
-import { usb } from 'webusb';
+import { WebUSB } from 'usb';
 import {
     download,
     listDevice,
@@ -19,14 +19,28 @@ import {
     upload,
 } from './netmd-commands';
 import { MDTrack, Wireformat } from './netmd-interface';
-import { pad, formatTimeFromFrames, sanitizeTrackTitle, sleep } from './utils';
+import {
+    pad,
+    formatTimeFromFrames,
+    sanitizeTrackTitle,
+    sleep,
+    concatUint8Arrays,
+    decryptDataFromFactoryTransfer,
+    encryptDataForFactoryTransfer,
+} from './utils';
+import { DevicesIds } from './netmd';
 import { makeGetAsyncPacketIteratorOnWorkerThread } from './node-encrypt-worker';
 import { Worker } from 'worker_threads';
 import readline from 'readline';
 import { DiscFormat } from '.';
 import { formatQuery } from './query-utils';
+import { readUTOCSector } from './factory';
 
 async function main() {
+    const usb = new WebUSB({
+        allowedDevices: DevicesIds.map(({ deviceId, vendorId }) => ({ deviceId, vendorId })),
+        deviceTimeout: 1000000,
+    });
     async function openDeviceOrExit(usb: USB) {
         let netmdInterface = await openNewDevice(usb);
         if (netmdInterface === null) {
@@ -90,7 +104,7 @@ async function main() {
                                     break;
                             }
                         } catch (e) {
-                            console.log('Failed', e.stack);
+                            console.log('Failed', (e as any).stack);
                         }
                     });
                 }
@@ -336,6 +350,35 @@ async function main() {
             async argv => {
                 let netmdInterface = await openDeviceOrExit(usb);
                 await netmdInterface.moveTrack(argv.src_track_number, argv.dst_track_number);
+            }
+        )
+        /*
+            At this point, it's impossible to implement write_utoc, as writing the metadata sections
+            is not enough. The device caches the TOC stored in these sections, so triggering
+            a TOC Edit on-device would flush the old TOC, partially cached in the device's
+            system RAM to the metadata sections first, corrupting everything written using
+            writeMetadataPeripheral. To write the TOC, an exploit has to be triggered to make
+            the player skip the RAM to peripheral flush, and right now that's only possible using
+            a USB buffer code execution exploit, which isn't part of netmd-js.
+        */
+        .command(
+            'read_utoc [outputfile]',
+            'Read the UTOC data from a recordable disc (Uses factory mode - only applicable for non-HiMD Sony (and some Aiwa) Portables)',
+            yargs => {
+                return yargs.positional('outputfile', {
+                    describe: "The output files' path.",
+                    demandOption: true,
+                    type: 'string',
+                });
+            },
+            async argv => {
+                let netmdInterface = await openDeviceOrExit(usb);
+                let factory = await netmdInterface.factory();
+                for (let i = 0; i < 7; i++) {
+                    const fileName = argv.outputfile + i.toString();
+                    fs.writeFileSync(fileName, await readUTOCSector(factory, i));
+                    console.log(`Written sector ${i} to file ${fileName}`);
+                }
             }
         )
         .option('verbose', {

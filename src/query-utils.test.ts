@@ -2,7 +2,7 @@
 
 import JSBI from 'jsbi';
 import { scanQuery, formatQuery, BCD2int, int2BCD } from './query-utils';
-import { assertString, arrayBuffersAreEqual, assert } from './utils';
+import { arrayBuffersAreEqual, assert, encodeToSJIS, assertUint8Array } from './utils';
 
 describe('formatQuery', function() {
     test('format const', function() {
@@ -12,7 +12,7 @@ describe('formatQuery', function() {
     });
 
     test('format string', function() {
-        let query = formatQuery('00 00 00 %x', 'ciao');
+        let query = formatQuery('00 00 00 %x', encodeToSJIS('ciao'));
         let result = new Uint8Array([
             0x00,
             0x00, // Header
@@ -34,13 +34,13 @@ describe('formatQuery', function() {
     });
 
     test('format raw string', function() {
-        let query = formatQuery('00 00 00 %*', 'abc');
+        let query = formatQuery('00 00 00 %*', encodeToSJIS('abc'));
         let result = new Uint8Array([0x00, 0x00, 0x00, 0x61, 0x62, 0x63]);
         expect(arrayBuffersAreEqual(query, result.buffer)).toBeTruthy();
     });
 
     test('format null terminated string', function() {
-        let query = formatQuery('00 00 00 %s', 'ciao');
+        let query = formatQuery('00 00 00 %s', encodeToSJIS('ciao'));
         let result = new Uint8Array([
             0x00,
             0x00, // Header
@@ -74,9 +74,27 @@ describe('formatQuery', function() {
         expect(arrayBuffersAreEqual(query, result.buffer)).toBeTruthy();
     });
 
+    test('format double word little endian', function() {
+        let query = formatQuery('00 00 00 %<d', 0xff019922);
+        let result = new Uint8Array([0x00, 0x00, 0x00, 0x22, 0x99, 0x01, 0xff]);
+        expect(arrayBuffersAreEqual(query, result.buffer)).toBeTruthy();
+    });
+
     test('format quad word', function() {
         let query = formatQuery('00 00 00 %q', JSBI.BigInt('0xff019922229901ff'));
         let result = new Uint8Array([0x00, 0x00, 0x00, 0xff, 0x01, 0x99, 0x22, 0x22, 0x99, 0x01, 0xff]);
+        expect(arrayBuffersAreEqual(query, result.buffer)).toBeTruthy();
+    });
+
+    test('format 1-byte BCD', function() {
+        let query = formatQuery('00 00 00 %B', 24);
+        let result = new Uint8Array([0x00, 0x00, 0x00, 0x24]);
+        expect(arrayBuffersAreEqual(query, result.buffer)).toBeTruthy();
+    });
+
+    test('format 2-byte BCD', function() {
+        let query = formatQuery('00 00 00 %W', 24);
+        let result = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x24]);
         expect(arrayBuffersAreEqual(query, result.buffer)).toBeTruthy();
     });
 });
@@ -101,8 +119,8 @@ describe('scanQuery', function() {
         let format = '00 00 %*';
         let result = scanQuery(query, format);
         expect(result).toHaveLength(1);
-        let remaining = assertString(result.pop());
-        expect(remaining).toEqual('\x00\x01');
+        let remaining = assertUint8Array(result.pop());
+        expect(remaining).toEqual(new Uint8Array([0x00, 0x01]));
     });
 
     test('parse string', function() {
@@ -119,7 +137,7 @@ describe('scanQuery', function() {
         let format = '00 00 %x';
         let result = scanQuery(query, format);
         expect(result).toHaveLength(1);
-        let value = assertString(result.pop());
+        let value = Buffer.from(assertUint8Array(result.pop())).toString();
         expect(value).toEqual('ciao');
     });
 
@@ -138,8 +156,8 @@ describe('scanQuery', function() {
         let format = '00 00 %s';
         let result = scanQuery(query, format);
         expect(result).toHaveLength(1);
-        let value = assertString(result.pop());
-        expect(value).toEqual('ciao');
+        let value = Buffer.from(assertUint8Array(result.pop())).toString();
+        expect(value).toEqual('ciao\0');
     });
 
     test('parse byte', function() {

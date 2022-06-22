@@ -1,6 +1,6 @@
 {
   "name": "netmd-js",
-  "version": "3.2.3",
+  "version": "4.0.0",
   "description": "Access to NetMD MiniDisc devices",
   "main": "./dist/index.js",
   "repository": {
@@ -36,7 +36,7 @@
     "WebUSB",
     "Mini Disc"
   ],
-  "author": "Stefano Brilli <stefano@brilli.me> (https://stefano.brilli.me/)",
+  "author": "Stefano Brilli <stefano@brilli.me> (https://stefano.brilli.me/), Asivery <asivery@protonmail.com> (https://github.com/asivery/)",
   "license": "GPL-2.0",
   "devDependencies": {
     "@types/browser-bunyan": "^0.4.5",
@@ -51,8 +51,8 @@
     "lint-staged": "^10.0.8",
     "prettier": "^1.19.1",
     "ts-jest": "^25.2.0",
-    "ts-node": "^9.0.0",
-    "typescript": "^3.7.5"
+    "ts-node": "^10.8.1",
+    "typescript": "^3.9.10"
   },
   "dependencies": {
     "browser-bunyan": "^1.5.3",
@@ -61,7 +61,7 @@
     "crypto-js": "^4.0.0",
     "jconv": "^0.1.5",
     "jsbi": "^3.1.1",
-    "webusb": "^2.0.1",
+    "usb": "^2.4.2",
     "yargs": "^15.1.0"
   }
 }

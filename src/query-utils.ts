@@ -8,32 +8,53 @@ const FORMAT_TYPE_LEN_DICT: { [k: string]: number } = {
     'd': 4, // doubleword
     'q': 8, // quadword
 };
-
+/*
+    %b, w, d, q - explained above (can have endiannes overriden by '>' and '<' operators, f. ex. %>d %<q)
+    %s - Uint8Array preceded by 2 bytes of length
+    %x - Uint8Array preceded by 2 bytes of length
+    %z - Uint8Array preceded by 1 byte of length
+    %* - raw Uint8Array
+    %B - BCD-encoded 1-byte number
+    %W - BCD-encoded 2-byte number
+*/
 export function formatQuery(format: string, ...args: unknown[]): ArrayBuffer {
     //console.log("SENT>>> F: ", format);
     let result = [];
     let half: null | string = null;
+    let endiannessOverride: null | string = null;
     let argStack = Array.from(args);
 
     let escaped = false;
     for (let char of format) {
         if (escaped) {
+            if (endiannessOverride === null && ['<', '>'].includes(char)) {
+                endiannessOverride = char;
+                continue;
+            }
             escaped = false;
             let value = argStack.shift();
             if (char in FORMAT_TYPE_LEN_DICT) {
                 let numberValue = JSBI.BigInt(value as JSBI | number);
                 for (let byte = FORMAT_TYPE_LEN_DICT[char] - 1; byte >= 0; byte--) {
-                    let v = JSBI.signedRightShift(numberValue, JSBI.BigInt(byte * 8));
+                    let b = byte;
+                    if (endiannessOverride === '<') {
+                        // Use little-endian
+                        b = FORMAT_TYPE_LEN_DICT[char] - 1 - byte;
+                    }
+                    let v = JSBI.signedRightShift(numberValue, JSBI.BigInt(b * 8));
                     v = JSBI.bitwiseAnd(v, JSBI.BigInt(0xff));
                     result.push(JSBI.toNumber(v));
                 }
-            } else if (char === 'x' || char === 's') {
+                endiannessOverride = null;
+            } else if (char === 'x' || char === 's' || char === 'z') {
                 let uint8ArrayValue = assertUint8Array(value);
                 let bufferLength = uint8ArrayValue.byteLength;
                 if (char === 's') {
                     bufferLength += 1;
                 }
-                result.push((bufferLength >> 8) & 0xff);
+                if (char !== 'z') {
+                    result.push((bufferLength >> 8) & 0xff);
+                }
                 result.push(bufferLength & 0xff);
                 result.push(...uint8ArrayValue);
                 if (char === 's') {
@@ -45,6 +66,12 @@ export function formatQuery(format: string, ...args: unknown[]): ArrayBuffer {
                 } else {
                     assert(false, `Unexpected type for value`);
                 }
+            } else if (char === 'B' || char === 'W') {
+                let converted = int2BCD(value as number);
+                if (char === 'W') {
+                    result.push((converted >> 8) & 0xff);
+                }
+                result.push(converted & 0xff);
             } else {
                 assert(false, `Unrecognized format char ${char}`);
             }
@@ -68,11 +95,13 @@ export function formatQuery(format: string, ...args: unknown[]): ArrayBuffer {
     return new Uint8Array(result).buffer;
 }
 
-export function scanQuery(query: ArrayBuffer | number[], format: string) {
+export function scanQuery(query: ArrayBuffer | number[] | Uint8Array, format: string) {
     let result: unknown[] = [];
     let inputStack: number[];
     if (query instanceof ArrayBuffer) {
         inputStack = Array.from(new Uint8Array(query));
+    } else if (query instanceof Uint8Array) {
+        inputStack = Array.from(query);
     } else {
         inputStack = query;
     }
@@ -90,10 +119,15 @@ export function scanQuery(query: ArrayBuffer | number[], format: string) {
     */
     let initialLength = inputStack.length;
     let half: string | null = null;
+    let endiannessOverride: string | null = null;
     let escaped = false;
 
     for (let char of format) {
         if (escaped) {
+            if (endiannessOverride == null && ['<', '>'].includes(char)) {
+                endiannessOverride = char;
+                continue;
+            }
             escaped = false;
             if (char === '?') {
                 inputStack.shift();
@@ -102,13 +136,19 @@ export function scanQuery(query: ArrayBuffer | number[], format: string) {
             if (char in FORMAT_TYPE_LEN_DICT) {
                 let value = JSBI.BigInt(0);
                 for (let byte = FORMAT_TYPE_LEN_DICT[char] - 1; byte >= 0; byte--) {
+                    let b = byte;
+                    if (endiannessOverride === '<') {
+                        // Use little-endian
+                        b = FORMAT_TYPE_LEN_DICT[char] - 1 - byte;
+                    }
                     let v = JSBI.BigInt(inputStack.shift()!);
-                    v = JSBI.leftShift(v, JSBI.BigInt(byte * 8));
+                    v = JSBI.leftShift(v, JSBI.BigInt(b * 8));
                     value = JSBI.bitwiseOr(value, v);
                 }
+                endiannessOverride = null;
                 result.push(value);
-            } else if (char === 's' || char === 'x') {
-                let length = (inputStack.shift()! << 8) | inputStack.shift()!;
+            } else if (char === 's' || char === 'x' || char === 'z') {
+                let length = char === 'z' ? inputStack.shift()! : (inputStack.shift()! << 8) | inputStack.shift()!;
                 let newInputStack = inputStack.splice(length);
                 let buffer = new Uint8Array(inputStack);
                 inputStack = newInputStack;
@@ -124,6 +164,12 @@ export function scanQuery(query: ArrayBuffer | number[], format: string) {
             } else if (char === '#') {
                 let value = new Uint8Array(inputStack.splice(0));
                 result.push(value);
+            } else if (char === 'B') {
+                let v = inputStack.shift()!;
+                result.push(BCD2int(v));
+            } else if (char === 'W') {
+                let v = (inputStack.shift()! << 8) | inputStack.shift()!;
+                result.push(BCD2int(v));
             } else {
                 throw new Error(`Unrecognized format char ${char}`);
             }
@@ -144,7 +190,7 @@ export function scanQuery(query: ArrayBuffer | number[], format: string) {
             let formatValue = Number.parseInt(half + char, 16);
             if (formatValue != inputValue) {
                 let i = initialLength - inputStack.length - 1;
-                throw new Error(`Format and input mismatch at ${i}: expected ${formatValue}, got ${inputValue}`);
+                throw new Error(`Format and input mismatch at ${i}: expected ${formatValue}, got ${inputValue} (format ${format})`);
             }
             half = null;
         }

@@ -52,7 +52,7 @@ export async function* getAsyncPacketIterator({
         const dataChunk = uint8DataArray.subarray(offset, offset + currentChunkSize);
         const dataChunkWA = Crypto.lib.WordArray.create(dataChunk) as any;
 
-        let encryptedChunk = Crypto.DES.encrypt(dataChunkWA, rawKeyWA, {
+        let encryptedChunk = Crypto.DES.encrypt(dataChunkWA, rawKeyWA as any, {
             mode: Crypto.mode.CBC,
             iv: ivWA,
         });
