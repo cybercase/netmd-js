@@ -347,8 +347,10 @@ export class NetMDInterface {
         }
         let result = scanQuery(
             reply,
-            `1809 8001 0430 %?%? %?%? %?%? ` + `%?%? %?%? %?%? %?%? %? %?00 00%?0000 ` + `000b 0002 0007 00 %W %B %B %B %B`
+            `1809 8001 0430 %?%? %?%? %?%? ` + `%?%? %?%? %?%? %?%? %? %?00 00%?0000 ` + `000b 0002 0007 00 %w %B %B %B %B`
         );
+
+        result[0] = JSBI.toNumber(result[0] as JSBI);
 
         await this.changeDescriptorState(Descriptor.operatingStatusBlock, DescriptorAction.close);
 
@@ -411,7 +413,7 @@ export class NetMDInterface {
     async gotoTime(track: number, hour = 0, minute = 0, second = 0, frame = 0) {
         const query = formatQuery('1850 ff000000 0000 %w %B%B%B%B', track, hour, minute, second, frame);
         const reply = await this.sendQuery(query);
-        let res = scanQuery(reply, '1850 00000000 %?%? %w %b%b%b%b');
+        let res = scanQuery(reply, '1850 00000000 %?%? %w %B%B%B%B');
         return res.map(j => JSBI.toNumber(j as JSBI));
     }
 
@@ -771,7 +773,7 @@ export class NetMDInterface {
         }
         let keychains = concatUint8Arrays(...keychain);
         const query = formatQuery(
-            '1800 080046 f0030103 12 ff %w %d %d %d %d 00000000 %* %*',
+            '1800 080046 f0030103 12 ff %w 0000 %w %d %d %d 00000000 %* %*',
             databytes,
             databytes,
             chainlen,

@@ -117,10 +117,10 @@ export async function getDescriptiveDeviceCode(factoryInterface: NetMDFactoryInt
     let code = '';
     switch (chip) {
         case 0x20:
-            code = 'A';
+            code = 'R';
             break;
         case 0x21:
-            code = 'B';
+            code = 'S';
             break;
         default:
             code = `${chip}?`;
