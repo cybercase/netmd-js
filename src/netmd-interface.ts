@@ -414,7 +414,8 @@ export class NetMDInterface {
         const query = formatQuery('1850 ff000000 0000 %w %B%B%B%B', track, hour, minute, second, frame);
         const reply = await this.sendQuery(query);
         let res = scanQuery(reply, '1850 00000000 %?%? %w %B%B%B%B');
-        return res.map(j => JSBI.toNumber(j as JSBI));
+        res[0] = JSBI.toNumber(res[0] as JSBI);
+        return res;
     }
 
     async _trackChange(direction: number) {
