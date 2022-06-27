@@ -852,50 +852,19 @@ export class NetMDInterface {
         pktSize: number,
         packets: AsyncIterable<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>,
         hexSessionKey: string,
-        progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void,
-        skipCheckForTOCEdit?: boolean
+        progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void
     ) {
-        skipCheckForTOCEdit = true;
-        // Temporarily disabled LAM compatibility improvements, because it is reported to cause issues for other devices.
-
         if (hexSessionKey.length !== 16) {
             throw new Error('Supplied Session Key length wrong');
         }
 
         const totalBytes = pktSize + 24; //framesizedict[wireformat] * frames + pktcount * 24;
 
-        let deviceMode;
-        try {
-            [deviceMode] = skipCheckForTOCEdit ? [null] : await this.getFullOperatingStatus();
-        } catch (err) {
-            throw new NetMDError('Error while checking for ToC Edit: ' + (err as any).toString());
-        }
-
         const query = formatQuery('1800 080046 f0030103 28 ff 000100 1001 ffff 00 %b %b %d %d', wireformat, discformat, frames, totalBytes);
         let reply = await this.sendQuery(query, false, true); // Accepts interim response
         scanQuery(reply, '1800 080046 f0030103 28 00 000100 1001 %?%? 00 %*');
 
         await this.waitForSync();
-
-        if (deviceMode != 6 && !skipCheckForTOCEdit) {
-            let triesToWaitOutTOCEdit = 0;
-            try {
-                for (let triesToWaitOutTOCEdit = 0; triesToWaitOutTOCEdit < 60; triesToWaitOutTOCEdit++) {
-                    const [mode, status] = await this.getFullOperatingStatus();
-                    await this.getStatus();
-                    // TODO: Fix support for other devices. Mode=7, status=49781 should be allowed
-                    // Other corner cases aren't known yet, but probably exist.
-                    if (status === 65319 || mode == 6) break;
-                    await sleep(500);
-                    this.logger?.debug({ method: `sendTrack`, result: 'ToC EDIT' });
-                }
-            } catch (err) {
-                throw new NetMDError('Error while checking for ToC Edit: ' + (err as any).toString());
-            }
-
-            if (triesToWaitOutTOCEdit === 60)
-                console.error("Warning: It looks like this device doesn't return correct TOC Editing state. Had to wait 30 seconds");
-        }
 
         const swapNeeded = !isBigEndian();
         let packetCount = 0;
@@ -1184,41 +1153,15 @@ export class MDSession {
 
         await this.md.setupDownload(trk.getContentID(), trk.getKEK(), this.hexSessionKey);
         let dataFormat = trk.getDataFormat();
-
-        const parameters: [
-            number,
-            number,
-            number,
-            number,
-            AsyncIterable<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>,
-            string,
-            ((progress: { writtenBytes: number; totalBytes: number }) => void)?,
-            boolean?
-        ] = [
+        let [track, uuid, ccid] = await this.md.sendTrack(
             dataFormat,
             discforwire[dataFormat],
             trk.getFrameCount(),
             trk.getTotalSize(),
             trk.getPacketWorkerIterator(),
             this.hexSessionKey!,
-            progressCallback,
-        ];
-        let track, uuid, ccid;
-        try {
-            [track, uuid, ccid] = await this.md.sendTrack(...parameters);
-        } catch (error) {
-            if (error instanceof NetMDError && !(error instanceof NetMDRejected)) {
-                // The error occurred when checking for ToC Edit
-                console.error(error);
-                await this.md.terminate();
-                await this.md.setupDownload(trk.getContentID(), trk.getKEK(), this.hexSessionKey);
-                parameters.push(true); // skipTOCEditCheck
-                [track, uuid, ccid] = await this.md.sendTrack(...parameters);
-            } else {
-                throw error;
-            }
-        }
-
+            progressCallback
+        );
         await this.md.setTrackTitle(track, trk.title);
         if (trk.fullWidthTitle) {
             await this.md.setTrackTitle(track, trk.fullWidthTitle, true);
