@@ -855,6 +855,9 @@ export class NetMDInterface {
         progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void,
         skipCheckForTOCEdit?: boolean
     ) {
+        skipCheckForTOCEdit = true;
+        // Temporarily disabled LAM compatibility improvements, because it is reported to cause issues for other devices.
+
         if (hexSessionKey.length !== 16) {
             throw new Error('Supplied Session Key length wrong');
         }
@@ -880,6 +883,8 @@ export class NetMDInterface {
                 for (let triesToWaitOutTOCEdit = 0; triesToWaitOutTOCEdit < 60; triesToWaitOutTOCEdit++) {
                     const [mode, status] = await this.getFullOperatingStatus();
                     await this.getStatus();
+                    // TODO: Fix support for other devices. Mode=7, status=49781 should be allowed
+                    // Other corner cases aren't known yet, but probably exist.
                     if (status === 65319 || mode == 6) break;
                     await sleep(500);
                     this.logger?.debug({ method: `sendTrack`, result: 'ToC EDIT' });
