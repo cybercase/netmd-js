@@ -92,6 +92,23 @@ export async function patch(factoryInterface: NetMDFactoryInterface, address: nu
     await cleanWrite(factoryInterface, control, new Uint8Array([9]), MemoryType.MAPPED);
 }
 
+export async function unpatch(factoryInterface: NetMDFactoryInterface, patchNumber: number, totalPatches: number) {
+    const base = 0x03802000 + patchNumber * 0x10;
+    const control = 0x03802000 + totalPatches * 0x10;
+
+    // Write 5, 12 to main control
+    await cleanWrite(factoryInterface, control, new Uint8Array([5]), MemoryType.MAPPED);
+    await cleanWrite(factoryInterface, control, new Uint8Array([12]), MemoryType.MAPPED);
+
+    let patchControl = await cleanRead(factoryInterface, base, 4, MemoryType.MAPPED);
+    patchControl[0] = (patchControl[0] & 0xfe) >>> 0;
+    await cleanWrite(factoryInterface, base, patchControl, MemoryType.MAPPED);
+
+    // write 5, 9 to main control
+    await cleanWrite(factoryInterface, control, new Uint8Array([5]), MemoryType.MAPPED);
+    await cleanWrite(factoryInterface, control, new Uint8Array([9]), MemoryType.MAPPED);
+}
+
 export async function readUTOCSector(factoryInterface: NetMDFactoryInterface, sector: number): Promise<Uint8Array> {
     const SIZE = 0x10;
     let parts: Uint8Array[] = [];
