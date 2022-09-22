@@ -17,7 +17,7 @@ import {
     sanitizeHalfWidthTitle,
 } from './utils';
 import JSBI from 'jsbi';
-import Crypto from 'crypto-js';
+import Crypto from '@originjs/crypto-js-wasm';
 
 import { NetMDError, NetMDNotImplemented, NetMDRejected, Status } from './netmd-shared-objects';
 import { NetMDFactoryInterface } from './factory/netmd-factory-interface';
@@ -1045,7 +1045,7 @@ export class MDTrack {
         const key = Crypto.DES.encrypt(datakeyWA, kekWA, { mode: Crypto.mode.ECB });
 
         const firstivWA = Crypto.lib.WordArray.create(firstiv) as any;
-        const dataWA = Crypto.lib.WordArray.create(this.data) as any;
+        const dataWA = Crypto.lib.WordArray.create(new Uint8Array(this.data)) as any;
 
         let encrypted = Crypto.DES.encrypt(dataWA, key.ciphertext, {
             mode: Crypto.mode.CBC,

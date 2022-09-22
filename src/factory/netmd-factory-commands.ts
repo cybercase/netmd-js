@@ -129,21 +129,29 @@ export async function writeUTOCSector(factoryInterface: NetMDFactoryInterface, s
     }
 }
 
-export async function getDescriptiveDeviceCode(factoryInterface: NetMDFactoryInterface) {
-    const [chip, firmware] = await factoryInterface.getDeviceCode();
+export async function getDescriptiveDeviceCode(input: (NetMDFactoryInterface | { chipType: number, version: number })) {
+    let chipType, version;
+    if((input as any).chipType !== undefined && (input as any).chipType !== undefined){
+        ({version, chipType} = (input as any));
+    } else {
+        ({version, chipType} = await (input as NetMDFactoryInterface).getDeviceCode());
+    }
     let code = '';
-    switch (chip) {
+    switch (chipType) {
         case 0x20:
             code = 'R';
             break;
         case 0x21:
             code = 'S';
             break;
+        case 0x24:
+            code = 'Hi';
+            break;
         default:
-            code = `${chip}?`;
+            code = `${chipType}?`;
             break;
     }
-    const [maj, min] = firmware.toString().split('');
+    const [maj, min] = version.toString().split('');
     code += `${maj}.${min}00`;
     return code;
 }

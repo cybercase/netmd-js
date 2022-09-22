@@ -2,7 +2,7 @@
 import { Buffer } from 'buffer';
 import jconv from 'jconv';
 import { DiscFormat } from './netmd-interface';
-import Crypto from 'crypto-js';
+import Crypto from '@originjs/crypto-js-wasm';
 
 export async function sleep(msec: number) {
     await new Promise(resolve => setTimeout(resolve, msec));
@@ -319,7 +319,7 @@ export function sanitizeFullWidthTitle(title: string, justRemap: boolean = false
     // prettier-ignore
     const mappingsRU: { [key: string]: string } = { 'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'i', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'kh', 'ц': 'tc', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch', 'ъ': '', 'ы': 'y', 'ь': "'", 'э': 'e', 'ю': 'iu', 'я': 'ia', 'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'E', 'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'I', 'К': 'K', 'Л': 'L', 'М': 'M', 'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U', 'Ф': 'F', 'Х': 'Kh', 'Ц': 'Tc', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Shch', 'Ъ': '', 'Ы': 'Y', 'Ь': "'", 'Э': 'E', 'Ю': 'Iu', 'Я': 'Ia'};
 
-    const newTitle = title
+    let newTitle = title
         .split('')
         .map(n => mappingsJP[n] ?? n)
         .map(n => mappingsRU[n] ?? n)
@@ -328,9 +328,8 @@ export function sanitizeFullWidthTitle(title: string, justRemap: boolean = false
     if (justRemap) return newTitle;
 
     const sjisEncoded = jconv.encode(newTitle, 'SJIS');
-    if (jconv.decode(sjisEncoded, 'SJIS') !== newTitle) return aggressiveSanitizeTitle(title); // Fallback
     if (sjisEncoded.length !== title.length * 2) return aggressiveSanitizeTitle(title); // Fallback (every character in the full-width title is 2 bytes)
-    return newTitle;
+    return jconv.decode(sjisEncoded, 'SJIS');
 }
 
 export function aggressiveSanitizeTitle(title: string) {

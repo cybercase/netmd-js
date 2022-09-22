@@ -253,8 +253,11 @@ export function getRemainingCharactersForTitles(disc: Disc, includeGroups?: bool
     let hwTitle = disc.title + `0;//`;
     if (includeGroups || includeGroups === undefined)
         for (let group of groups) {
-            let range = `${group.tracks[0].index + 1}${group.tracks.length - 1 !== 0 &&
-                `-${group.tracks[group.tracks.length - 1].index + 1}`}//`;
+            const indices = group.tracks.map(e => e.index);
+            const minGroupIndex = Math.min(...indices);
+            const maxGroupIndex = Math.max(...indices)
+            const range = `${minGroupIndex + 1}${group.tracks.length - 1 !== 0 &&
+                `-${maxGroupIndex + 1}`}//`;
             // The order of these characters doesn't matter. It's for length only
             fwTitle += group.fullWidthTitle + range;
             hwTitle += group.title + range;
@@ -301,10 +304,11 @@ export function compileDiscTitles(disc: Disc) {
 
     for (let n of disc.groups) {
         if (n.title === null || n.tracks.length === 0) continue;
-        let range = `${n.tracks[0].index + 1}`;
+        const minGroupIndex = Math.min(...n.tracks.map(e => e.index));
+        let range = `${minGroupIndex + 1}`;
         if (n.tracks.length !== 1) {
             // Special case
-            range += `-${n.tracks[0].index + n.tracks.length}`;
+            range += `-${minGroupIndex + n.tracks.length}`;
         }
 
         let newRawTitleAfterGroup = newRawTitle + `${range};${n.title}//`,

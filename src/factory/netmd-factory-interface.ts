@@ -174,8 +174,9 @@ export class NetMDFactoryInterface {
         const result = scanQuery(reply, '1812 00 %b %b 00 %B');
 
         const chipType = JSBI.toNumber(result[0] as JSBI);
+        const hwid = JSBI.toNumber(result[1] as JSBI);
         const version = result[2] as number;
-        return [chipType, version];
+        return { chipType, hwid, version };
     }
 
     public async getSwitchStatus() {
@@ -190,5 +191,23 @@ export class NetMDFactoryInterface {
             JSBI.toNumber(xy as JSBI),
             JSBI.toNumber(unlabeled as JSBI),
         ];
+    }
+}
+
+export class HiMDFactoryInterface extends NetMDFactoryInterface {
+    public async auth() {
+        await this.sendQuery(formatQuery("1802 ff04 4d44574d"));
+    }
+
+    public async changeMemoryState(address: number, length: number, type: MemoryType, state: MemoryOpenType, encrypted: boolean = false){
+        await this.sendQuery(formatQuery("182b ff %b %<d %b %b", type, address, length, state, encrypted ? 0x1 : 0x0));
+    }
+
+    public async read(address: number, length: number, type: MemoryType) {
+        const reply = await this.sendQuery(formatQuery('182c ff %b %<d', length, address));
+        const res = scanQuery(reply, '182c 00 %? %?%?%?%? %? %?%? %*');
+        const arr = [...(res[0] as Uint8Array)];
+        arr.splice(arr.length - 2);
+        return new Uint8Array(arr);
     }
 }

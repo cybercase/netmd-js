@@ -1,6 +1,7 @@
 import { inspect } from 'util';
 import { sleep, concatArrayBuffers } from './utils';
 import { Logger } from './logger';
+import Crypto from '@originjs/crypto-js-wasm';
 
 const BULK_WRITE_ENDPOINT = 0x02;
 const BULK_READ_ENDPOINT = 0x01;
@@ -63,6 +64,8 @@ export class NetMD {
 
     async init() {
         this.logger?.debug('Init');
+        await Crypto.algo.DES.loadWasm();
+        await Crypto.algo.TripleDES.loadWasm();
 
         if (!this.device.opened) {
             this.logger?.debug('Opening device');

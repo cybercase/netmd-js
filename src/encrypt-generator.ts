@@ -1,4 +1,4 @@
-import Crypto from 'crypto-js';
+import Crypto from '@originjs/crypto-js-wasm';
 import { concatUint8Arrays, wordArrayToByteArray } from './utils';
 
 export async function* getAsyncPacketIterator({

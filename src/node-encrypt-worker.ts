@@ -1,5 +1,6 @@
 import { getAsyncPacketIterator } from './encrypt-generator';
 import { Worker, isMainThread, parentPort } from 'worker_threads';
+import Crypto from '@originjs/crypto-js-wasm';
 
 // This generator uses a worker thread to encrypt the nextChunk
 // while yielding the current one.
@@ -20,7 +21,7 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
     }): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
         const w = worker;
 
-        const initWorker = () => {
+        const initWorker = () => new Promise(res => {
             w.postMessage(
                 {
                     action: 'init',
@@ -31,16 +32,14 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
                 },
                 [data]
             );
-        };
+            w.on('message', res);
+        });
 
         const askNextChunk = () => {
             w.postMessage({ action: 'getChunk' });
         };
 
         let resolver: (data: any) => void;
-        w.on('message', msg => {
-            resolver(msg);
-        });
 
         let encryptedBytes = 0;
         let totalBytes = data.byteLength;
@@ -60,7 +59,11 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
             askNextChunk();
         };
 
-        initWorker();
+        await initWorker();
+        w.on('message', msg => {
+            resolver(msg);
+        });
+
         queueNextChunk();
 
         let i = 0;
@@ -84,7 +87,9 @@ if (isMainThread) {
         const { action, ...others } = msg;
         if (action === 'init') {
             const { data, frameSize, kek, chunkSize } = others;
+            await Crypto.DES.loadWasm();
             iterator = getAsyncPacketIterator({ data, frameSize, kek, chunkSize });
+            postMessage({ init: true });
         } else if (action === 'getChunk') {
             let { value, done } = await iterator.next();
             if (done) {

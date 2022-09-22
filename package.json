@@ -41,7 +41,6 @@
   "devDependencies": {
     "@types/browser-bunyan": "^0.4.5",
     "@types/bunyan": "^1.8.6",
-    "@types/crypto-js": "^3.1.43",
     "@types/jest": "^25.1.2",
     "@types/node": "^13.9.0",
     "@types/w3c-web-usb": "^1.0.4",
@@ -55,10 +54,10 @@
     "typescript": "^3.9.10"
   },
   "dependencies": {
+    "@originjs/crypto-js-wasm": "github:asivery/crypto-js-wasm",
     "browser-bunyan": "^1.5.3",
     "buffer": "^5.5.0",
     "bunyan": "^1.8.12",
-    "crypto-js": "^4.0.0",
     "jconv": "^0.1.5",
     "jsbi": "^3.1.1",
     "usb": "^2.4.2",
