@@ -210,7 +210,7 @@ export class NetMDInterface {
     async sendCommand(query: ArrayBuffer, test = false) {
         let statusByte: ArrayBuffer;
         if (test) {
-            statusByte = new Uint8Array([Status.specificInquiry]).buffer;
+            statusByte = new Uint8Array([Status.generalInquiry]).buffer;
         } else {
             statusByte = new Uint8Array([Status.control]).buffer;
         }
