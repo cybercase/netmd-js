@@ -89,7 +89,7 @@ if (isMainThread) {
             const { data, frameSize, kek, chunkSize } = others;
             await Crypto.DES.loadWasm();
             iterator = getAsyncPacketIterator({ data, frameSize, kek, chunkSize });
-            postMessage({ init: true });
+            parentPort!.postMessage({ init: true });
         } else if (action === 'getChunk') {
             let { value, done } = await iterator.next();
             if (done) {
