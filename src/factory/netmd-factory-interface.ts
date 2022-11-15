@@ -196,11 +196,11 @@ export class NetMDFactoryInterface {
 
 export class HiMDFactoryInterface extends NetMDFactoryInterface {
     public async auth() {
-        await this.sendQuery(formatQuery("1802 ff04 4d44574d"));
+        await this.sendQuery(formatQuery('1802 ff04 4d44574d'));
     }
 
-    public async changeMemoryState(address: number, length: number, type: MemoryType, state: MemoryOpenType, encrypted: boolean = false){
-        await this.sendQuery(formatQuery("182b ff %b %<d %b %b", type, address, length, state, encrypted ? 0x1 : 0x0));
+    public async changeMemoryState(address: number, length: number, type: MemoryType, state: MemoryOpenType, encrypted: boolean = false) {
+        await this.sendQuery(formatQuery('182b ff %b %<d %b %b', type, address, length, state, encrypted ? 0x1 : 0x0));
     }
 
     public async read(address: number, length: number, type: MemoryType) {

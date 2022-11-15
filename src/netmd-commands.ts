@@ -255,9 +255,8 @@ export function getRemainingCharactersForTitles(disc: Disc, includeGroups?: bool
         for (let group of groups) {
             const indices = group.tracks.map(e => e.index);
             const minGroupIndex = Math.min(...indices);
-            const maxGroupIndex = Math.max(...indices)
-            const range = `${minGroupIndex + 1}${group.tracks.length - 1 !== 0 &&
-                `-${maxGroupIndex + 1}`}//`;
+            const maxGroupIndex = Math.max(...indices);
+            const range = `${minGroupIndex + 1}${group.tracks.length - 1 !== 0 && `-${maxGroupIndex + 1}`}//`;
             // The order of these characters doesn't matter. It's for length only
             fwTitle += group.fullWidthTitle + range;
             hwTitle += group.title + range;

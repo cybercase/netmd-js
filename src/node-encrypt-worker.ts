@@ -21,19 +21,20 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
     }): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
         const w = worker;
 
-        const initWorker = () => new Promise(res => {
-            w.postMessage(
-                {
-                    action: 'init',
-                    data,
-                    frameSize,
-                    kek,
-                    chunkSize,
-                },
-                [data]
-            );
-            w.on('message', res);
-        });
+        const initWorker = () =>
+            new Promise(res => {
+                w.postMessage(
+                    {
+                        action: 'init',
+                        data,
+                        frameSize,
+                        kek,
+                        chunkSize,
+                    },
+                    [data]
+                );
+                w.on('message', res);
+            });
 
         const askNextChunk = () => {
             w.postMessage({ action: 'getChunk' });

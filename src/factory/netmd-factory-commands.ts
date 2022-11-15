@@ -59,13 +59,19 @@ export async function writeOfAnyLength(
 export async function readPatch(factoryInterface: NetMDFactoryInterface, patchNumber: number) {
     const base = 0x03802000 + patchNumber * 0x10;
 
-    const address = JSBI.toNumber(scanQuery(await cleanRead(factoryInterface, base + 4, 4, MemoryType.MAPPED), "%<d")[0] as any);
+    const address = JSBI.toNumber(scanQuery(await cleanRead(factoryInterface, base + 4, 4, MemoryType.MAPPED), '%<d')[0] as any);
     const data = await cleanRead(factoryInterface, base + 8, 4, MemoryType.MAPPED);
 
     return { address, data };
 }
 
-export async function patch(factoryInterface: NetMDFactoryInterface, address: number, value: Uint8Array, patchNumber: number, totalPatches: number) {
+export async function patch(
+    factoryInterface: NetMDFactoryInterface,
+    address: number,
+    value: Uint8Array,
+    patchNumber: number,
+    totalPatches: number
+) {
     // Original method written by Sir68k.
     assert(value.length === 4);
 
@@ -139,12 +145,12 @@ export async function writeUTOCSector(factoryInterface: NetMDFactoryInterface, s
     }
 }
 
-export async function getDescriptiveDeviceCode(input: (NetMDFactoryInterface | { chipType: number, version: number })) {
+export async function getDescriptiveDeviceCode(input: NetMDFactoryInterface | { chipType: number; version: number }) {
     let chipType, version;
-    if((input as any).chipType !== undefined && (input as any).chipType !== undefined){
-        ({version, chipType} = (input as any));
+    if ((input as any).chipType !== undefined && (input as any).chipType !== undefined) {
+        ({ version, chipType } = input as any);
     } else {
-        ({version, chipType} = await (input as NetMDFactoryInterface).getDeviceCode());
+        ({ version, chipType } = await (input as NetMDFactoryInterface).getDeviceCode());
     }
     let code = '';
     switch (chipType) {
