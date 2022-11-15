@@ -725,7 +725,7 @@ export class NetMDInterface {
         const reply = await this.sendQuery(query, false, true);
         const [frames, codec, length] = scanQuery(reply, '1800 080046 f0030103 300000 1001 %w %b %d');
         const result = await this.netMd.readBulk(length as number, 0x10000, callback);
-        scanQuery(await this.readReply(), '1800 080046 f003010330 0000 1001 %?%? 00%?'); //The last byte is some kind of error counter.
+        scanQuery(await this.readReply(), '1800 080046 f003010330 0000 1001 %?%? %?%?'); //The last byte is some kind of error counter.
         await sleep(500);
 
         let format: DiscFormat = ((codec as number) & 0x06) as DiscFormat;

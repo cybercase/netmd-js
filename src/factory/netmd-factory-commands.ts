@@ -1,6 +1,7 @@
 import { assert, concatUint8Arrays, decryptDataFromFactoryTransfer, encryptDataForFactoryTransfer } from '../utils';
 import { NetMDFactoryInterface, DisplayMode, MemoryOpenType, MemoryType } from './netmd-factory-interface';
-import { formatQuery } from '../query-utils';
+import { formatQuery, scanQuery } from '../query-utils';
+import JSBI from 'jsbi';
 
 export async function display(factoryInterface: NetMDFactoryInterface, text: string | Uint8Array, blink: boolean = false) {
     await factoryInterface.setDisplayMode(DisplayMode.OVERRIDE);
@@ -53,6 +54,15 @@ export async function writeOfAnyLength(
     do {
         await cleanWrite(factoryInterface, address + i++ * SIZE, new Uint8Array(arr.splice(0, SIZE)), type, encrypted);
     } while (arr.length > 0);
+}
+
+export async function readPatch(factoryInterface: NetMDFactoryInterface, patchNumber: number) {
+    const base = 0x03802000 + patchNumber * 0x10;
+
+    const address = JSBI.toNumber(scanQuery(await cleanRead(factoryInterface, base + 4, 4, MemoryType.MAPPED), "%<d")[0] as any);
+    const data = await cleanRead(factoryInterface, base + 8, 4, MemoryType.MAPPED);
+
+    return { address, data };
 }
 
 export async function patch(factoryInterface: NetMDFactoryInterface, address: number, value: Uint8Array, patchNumber: number, totalPatches: number) {
