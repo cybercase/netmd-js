@@ -65,18 +65,28 @@ export async function readPatch(factoryInterface: NetMDFactoryInterface, patchNu
     return { address, data };
 }
 
+export async function himdPatch(
+    factoryInterface: NetMDFactoryInterface,
+    address: number,
+    value: Uint8Array,
+    patchNumber: number,
+){
+    return patch(factoryInterface, address, value, patchNumber, 16, 0x03804000);
+}
+
 export async function patch(
     factoryInterface: NetMDFactoryInterface,
     address: number,
     value: Uint8Array,
     patchNumber: number,
-    totalPatches: number
+    totalPatches: number,
+    peripheralBase: number = 0x03802000
 ) {
     // Original method written by Sir68k.
     assert(value.length === 4);
 
-    const base = 0x03802000 + patchNumber * 0x10;
-    const control = 0x03802000 + totalPatches * 0x10;
+    const base = peripheralBase + patchNumber * 0x10;
+    const control = peripheralBase + totalPatches * 0x10;
 
     // Write 5, 12 to main control
     await cleanWrite(factoryInterface, control, new Uint8Array([5]), MemoryType.MAPPED);

@@ -23,8 +23,8 @@ export enum DisplayMode {
     OVERRIDE = 0x1,
 }
 
-function calculateChecksum(data: Uint8Array, as16Bit: boolean) {
-    let crc = 0;
+function calculateChecksum(data: Uint8Array, as16Bit: boolean, seed: number = 0) {
+    let crc = seed;
     let newData: Uint8Array | Uint16Array = data;
     if (as16Bit) {
         newData = new Uint16Array(data.length / 2);
@@ -204,10 +204,21 @@ export class HiMDFactoryInterface extends NetMDFactoryInterface {
     }
 
     public async read(address: number, length: number, type: MemoryType) {
-        const reply = await this.sendQuery(formatQuery('182c ff %b %<d', length, address));
+        if(length > 0x1F)
+            throw new Error("Cannot read more than 0x1F bytes at a time.");
+        const query = formatQuery('182c ff %b %<d', (length & 0x1f) | (type << 5), address);
+        const reply = await this.sendQuery(query);
         const res = scanQuery(reply, '182c 00 %? %?%?%?%? %? %?%? %*');
         const arr = [...(res[0] as Uint8Array)];
         arr.splice(arr.length - 2);
         return new Uint8Array(arr);
+    }
+
+    public async write(address: number, data: Uint8Array, type: MemoryType) {
+        if(data.length > 0x1F)
+            throw new Error("Cannot read more than 0x1F bytes at a time.");
+        const crc = calculateChecksum(data, false, 0xA596);
+        const query = formatQuery("182d ff %b %<d %b 0000 %* %<w", (data.length & 0x1F) | (type << 5), address, data.length, data, crc);
+        await this.sendQuery(query);
     }
 }
