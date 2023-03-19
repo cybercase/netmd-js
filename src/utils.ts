@@ -1,6 +1,7 @@
 /* A bunch of utils. Some might be unused */
 import { Buffer } from 'buffer';
 import jconv from 'jconv';
+import { remove as removeDiacritics } from 'diacritics';
 import { DiscFormat } from './netmd-interface';
 import Crypto from '@originjs/crypto-js-wasm';
 
@@ -304,7 +305,7 @@ export function sanitizeHalfWidthTitle(title: string) {
     const newTitle = title
         .split('')
         .map(c => {
-            return check(c) ?? check(c.normalize('NFD').replace(/[\u0300-\u036f]/g, '')) ?? ' ';
+            return check(c) ?? check(removeDiacritics(c)) ?? ' ';
         })
         .join('');
     // Check if the amount of characters is the same as the amount of encoded bytes (when accounting for dakuten). Otherwise the disc might end up corrupted
@@ -336,7 +337,7 @@ export function sanitizeFullWidthTitle(title: string, justRemap: boolean = false
 }
 
 export function aggressiveSanitizeTitle(title: string) {
-    return title.normalize('NFD').replace(/[^\x00-\x7F]/g, '');
+    return removeDiacritics(title).normalize('NFD').replace(/[^\x00-\x7F]/g, '');
 }
 
 export function createAeaHeader(name = '', channels = 2, soundgroups = 1, groupstart = 0, encrypted = 0, flags = [0, 0, 0, 0, 0, 0, 0, 0]) {
