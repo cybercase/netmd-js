@@ -19,8 +19,9 @@ import {
 import JSBI from 'jsbi';
 import Crypto from '@originjs/crypto-js-wasm';
 
-import { NetMDError, NetMDNotImplemented, NetMDRejected, Status } from './netmd-shared-objects';
-import { NetMDFactoryInterface } from './factory/netmd-factory-interface';
+import { NetMDNotImplemented, NetMDRejected, Status } from './netmd-shared-objects';
+import { HiMDFactoryInterface, NetMDFactoryInterface, RH1FactoryInterface } from './factory/netmd-factory-interface';
+import { getDescriptiveDeviceCode } from './factory';
 
 enum Action {
     play = 0x75,
@@ -108,8 +109,6 @@ export const FrameSize: { [k: number]: number } = {
 };
 
 export class NetMDInterface {
-    static maxSyncAttempts = 4;
-    static syncRetryIntervalInMs = 100;
     static maxInterimReadAttempts = 4;
     static interimResponseRetryIntervalInMs = 100;
     constructor(public netMd: NetMD, private logger?: Logger) {
@@ -184,9 +183,18 @@ export class NetMDInterface {
     }
 
     async factory() {
+        const deviceName = this.netMd.getDeviceName();
+        const himd = deviceName.includes('MZ-RH') || deviceName.includes("MZ-NH");
+        
         await this._getDiscSubunitIdentifier();
-        const factoryIface = new NetMDFactoryInterface(this.netMd, this.logger);
+        const constructor = himd ? HiMDFactoryInterface : NetMDFactoryInterface;
+        let factoryIface = new constructor(this.netMd, this.logger);
         await factoryIface.auth();
+        const deviceCode = await getDescriptiveDeviceCode(factoryIface);
+        if(deviceCode.startsWith("Hx")){
+            // This is an MZ-RH1 - switch to the other interface
+            factoryIface = new RH1FactoryInterface(this.netMd, this.logger);
+        }
         return factoryIface;
     }
 
@@ -215,28 +223,6 @@ export class NetMDInterface {
             statusByte = new Uint8Array([Status.control]).buffer;
         }
         await this.netMd.sendCommand(concatArrayBuffers(statusByte, query));
-    }
-
-    async waitForSync() {
-        let currentAttempt = 0;
-        while (currentAttempt < NetMDInterface.maxSyncAttempts) {
-            const { data } = await this.netMd.getReplyLength();
-
-            if (data && data.getUint32(0) === 0) {
-                break;
-            } else {
-                this.logger?.debug({ method: 'waitForSync', result: data });
-            }
-
-            currentAttempt += 1;
-            await sleep(NetMDInterface.syncRetryIntervalInMs * (Math.pow(2, currentAttempt) - 1));
-        }
-
-        if (currentAttempt >= NetMDInterface.maxSyncAttempts) {
-            this.logger?.warn({ method: 'waitForSync', result: 'too many tries without success' });
-        }
-
-        return currentAttempt < NetMDInterface.maxSyncAttempts;
     }
 
     async readReply(acceptInterim = false) {
@@ -701,7 +687,7 @@ export class NetMDInterface {
         let res = scanQuery(
             reply,
             '1806 02101000 3080 0300 1000 001d0000 001b %?03 0017 8000 0005 %W %B %B %B 0005 %W %B %B %B 0005 %W %B %B %B'
-        );
+        );                                                          //25^
         for (let i = 0; i < 3; i++) {
             let tmp: number[] = res.splice(0, 4) as number[];
             result.push(tmp);
@@ -835,13 +821,11 @@ export class NetMDInterface {
             padding: Crypto.pad.NoPadding,
         });
 
-        await this.waitForSync();
 
         const query = formatQuery('1800 080046 f0030103 48 ff 00 1001 %w %*', tracknum, wordArrayToByteArray(authentication.ciphertext));
         const reply = await this.sendQuery(query);
         const result = scanQuery(reply, '1800 080046 f0030103 48 00 00 1001 %?%?');
 
-        await this.waitForSync();
         return result;
     }
 
@@ -858,13 +842,17 @@ export class NetMDInterface {
             throw new Error('Supplied Session Key length wrong');
         }
 
+        // The sharps are slow...
+        await sleep(200);
+
         const totalBytes = pktSize + 24; //framesizedict[wireformat] * frames + pktcount * 24;
 
         const query = formatQuery('1800 080046 f0030103 28 ff 000100 1001 ffff 00 %b %b %d %d', wireformat, discformat, frames, totalBytes);
         let reply = await this.sendQuery(query, false, true); // Accepts interim response
         scanQuery(reply, '1800 080046 f0030103 28 00 000100 1001 %?%? 00 %*');
 
-        await this.waitForSync();
+        // The sharps are slow...
+        await sleep(200);
 
         const swapNeeded = !isBigEndian();
         let packetCount = 0;

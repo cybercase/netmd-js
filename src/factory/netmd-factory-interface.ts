@@ -131,10 +131,10 @@ export class NetMDFactoryInterface {
     }
 
     public async readMetadataPeripheral(sector: number, offset: number, length: number) {
-        const query = formatQuery('1824 ff %<w %<w %b 00', sector, offset, length);
+        const query = formatQuery('1824 ff %<w %<w %b', sector, offset, length);
         const reply = await this.sendQuery(query);
-        const res = scanQuery(reply, '1824 00 %?%?%?%? %z');
-        return res[0] as Uint8Array;
+        const res = scanQuery(reply, '1824 00 %?%?%?%? %b %*');
+        return res[1] as Uint8Array;
     }
 
     public async writeMetadataPeripheral(sector: number, offset: number, data: Uint8Array) {
@@ -171,12 +171,13 @@ export class NetMDFactoryInterface {
     public async getDeviceCode() {
         const query = formatQuery('1812 ff');
         const reply = await this.sendQuery(query);
-        const result = scanQuery(reply, '1812 00 %b %b 00 %B');
+        const result = scanQuery(reply, '1812 00 %b %b %b %B');
 
         const chipType = JSBI.toNumber(result[0] as JSBI);
         const hwid = JSBI.toNumber(result[1] as JSBI);
-        const version = result[2] as number;
-        return { chipType, hwid, version };
+        const subversion = JSBI.toNumber(result[2] as JSBI);
+        const version = result[3] as number;
+        return { chipType, hwid, version, subversion };
     }
 
     public async getSwitchStatus() {
@@ -200,11 +201,11 @@ export class HiMDFactoryInterface extends NetMDFactoryInterface {
     }
 
     public async changeMemoryState(address: number, length: number, type: MemoryType, state: MemoryOpenType, encrypted: boolean = false) {
-        await this.sendQuery(formatQuery('182b ff %b %<d %b %b', type, address, length, state, encrypted ? 0x1 : 0x0));
+        await this.sendQuery(formatQuery('182b ff %b %<d %b %b %b', type, address, length, state, encrypted ? 0x1 : 0x0));
     }
 
     public async read(address: number, length: number, type: MemoryType) {
-        if(length > 0x1F)
+        if (length > 0x1F)
             throw new Error("Cannot read more than 0x1F bytes at a time.");
         const query = formatQuery('182c ff %b %<d', (length & 0x1f) | (type << 5), address);
         const reply = await this.sendQuery(query);
@@ -215,10 +216,33 @@ export class HiMDFactoryInterface extends NetMDFactoryInterface {
     }
 
     public async write(address: number, data: Uint8Array, type: MemoryType) {
-        if(data.length > 0x1F)
+        if (data.length > 0x1F)
             throw new Error("Cannot read more than 0x1F bytes at a time.");
         const crc = calculateChecksum(data, false, 0xA596);
         const query = formatQuery("182d ff %b %<d %b 0000 %* %<w", (data.length & 0x1F) | (type << 5), address, data.length, data, crc);
         await this.sendQuery(query);
+    }
+}
+
+export class RH1FactoryInterface extends HiMDFactoryInterface {
+    public async changeMemoryState(address: number, length: number, type: MemoryType, state: MemoryOpenType, encrypted?: boolean) { } // STUB
+
+    private translateToDRAMAddr(address: number) {
+        address -= 0x02000000;
+        const subBlockAddr = address % 2368;
+        const subBlock = Math.floor(address / 2368);
+        return [subBlock, subBlockAddr];
+    }
+
+    public read(address: number, length: number, type: MemoryType) {
+        if (type !== MemoryType.MAPPED || address < 0x02000000) throw new Error("Invalid address!");
+        const [block, subBlock] = this.translateToDRAMAddr(address);
+        return this.readMetadataPeripheral(block, subBlock, length);
+    }
+
+    public write(address: number, data: Uint8Array, type: MemoryType): Promise<void> {
+        if (type !== MemoryType.MAPPED || address < 0x02000000) throw new Error("Invalid address!");
+        const [block, subBlock] = this.translateToDRAMAddr(address);
+        return this.writeMetadataPeripheral(block, subBlock, data);
     }
 }

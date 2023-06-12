@@ -182,14 +182,24 @@ export async function listContent(mdIface: NetMDInterface) {
     const [discUsed, discTotal, discLeft] = await mdIface.getDiscCapacity();
     const trackCount = await mdIface.getTrackCount();
 
+    let framesUsed = timeToFrames(discUsed),
+        framesTotal = timeToFrames(discTotal),
+        framesLeft = timeToFrames(discLeft);
+    // Some devices report the time remaining of the currently selected recording mode. (Sharps)
+    while(framesTotal > 512 * 60 * 82){
+        framesUsed /= 2;
+        framesTotal /= 2;
+        framesLeft /= 2;
+    }
+
     let disc: Disc = {
         title: title,
         fullWidthTitle: fullWidthTitle,
         writable: !!(flags & DiscFlag.writable),
         writeProtected: !!(flags & DiscFlag.writeProtected),
-        used: timeToFrames(discUsed),
-        left: timeToFrames(discLeft),
-        total: timeToFrames(discTotal),
+        used: framesUsed,
+        left: framesLeft,
+        total: framesTotal,
         trackCount: trackCount,
         groups: [],
     };
@@ -229,13 +239,13 @@ export async function listContent(mdIface: NetMDInterface) {
     return disc;
 }
 
-const fixLength = (len: number) => Math.ceil(len / 7);
+const charsToCells = (len: number) => Math.ceil(len / 7);
 
 export function getCellsForTitle(trk: Track): { halfWidth: number; fullWidth: number } {
     // Sometimes 'LP: ' is added to track names even if the title is '' (+1 cell for non-sp tracks)
     const encodingNameCorrection = trk.encoding === Encoding.sp ? 0 : 1;
-    const fullWidthLength = fixLength((trk.fullWidthTitle?.length ?? 0) * 2);
-    const halfWidthLength = fixLength(getHalfWidthTitleLength(trk.title ?? ''));
+    const fullWidthLength = charsToCells((trk.fullWidthTitle?.length ?? 0) * 2);
+    const halfWidthLength = charsToCells(getHalfWidthTitleLength(trk.title ?? ''));
     return {
         halfWidth: Math.max(encodingNameCorrection, halfWidthLength),
         fullWidth: Math.max(encodingNameCorrection, fullWidthLength),
@@ -265,8 +275,8 @@ export function getRemainingCharactersForTitles(disc: Disc, includeGroups?: bool
     let usedHalfWidthCells = 0,
         usedFullWidthCells = 0;
 
-    usedFullWidthCells += fixLength(fwTitle.length * 2);
-    usedHalfWidthCells += fixLength(getHalfWidthTitleLength(hwTitle));
+    usedFullWidthCells += charsToCells(fwTitle.length * 2);
+    usedHalfWidthCells += charsToCells(getHalfWidthTitleLength(hwTitle));
     for (let trk of getTracks(disc)) {
         let { halfWidth, fullWidth } = getCellsForTitle(trk);
         usedHalfWidthCells += halfWidth;
@@ -313,10 +323,10 @@ export function compileDiscTitles(disc: Disc) {
         let newRawTitleAfterGroup = newRawTitle + `${range};${n.title}//`,
             newRawFullWidthTitleAfterGroup = newRawFullWidthTitle + halfWidthToFullWidthRange(range) + `；${n.fullWidthTitle ?? ''}／／`;
 
-        let halfWidthTitlesLengthInTOC = fixLength(getHalfWidthTitleLength(newRawTitleAfterGroup)) * 7;
+        let halfWidthTitlesLengthInTOC = charsToCells(getHalfWidthTitleLength(newRawTitleAfterGroup)) * 7;
 
         if (useFullWidth) {
-            let fullWidthTitlesLengthInTOC = fixLength(newRawFullWidthTitleAfterGroup.length * 2) * 7;
+            let fullWidthTitlesLengthInTOC = charsToCells(newRawFullWidthTitleAfterGroup.length * 2) * 7;
             if (availableFullWidth - fullWidthTitlesLengthInTOC >= 0) {
                 // Try to fit as many groups as possible.
                 newRawFullWidthTitle = newRawFullWidthTitleAfterGroup;
@@ -329,8 +339,8 @@ export function compileDiscTitles(disc: Disc) {
         }
     }
 
-    let halfWidthTitlesLengthInTOC = fixLength(getHalfWidthTitleLength(newRawTitle)) * 7;
-    let fullWidthTitlesLengthInTOC = fixLength(newRawFullWidthTitle.length * 2); // If this check fails the titles without the groups already take too much space, don't change anything
+    let halfWidthTitlesLengthInTOC = charsToCells(getHalfWidthTitleLength(newRawTitle)) * 7;
+    let fullWidthTitlesLengthInTOC = charsToCells(newRawFullWidthTitle.length * 2); // If this check fails the titles without the groups already take too much space, don't change anything
     if (availableHalfWidth - halfWidthTitlesLengthInTOC < 0) {
         newRawTitle = '';
     }
@@ -413,7 +423,7 @@ export async function upload(
     switch (format) {
         case DiscFormat.spStereo:
         case DiscFormat.spMono:
-            header = createAeaHeader(await mdIface.getTrackTitle(track), format === DiscFormat.spStereo ? 2 : 1, frames);
+            header = createAeaHeader(await mdIface.getTrackTitle(track), format === DiscFormat.spStereo ? 2 : 1, Math.floor(result.length / 212));
             break;
         case DiscFormat.lp2:
         case DiscFormat.lp4:

@@ -1,7 +1,12 @@
 import { assert, concatUint8Arrays, decryptDataFromFactoryTransfer, encryptDataForFactoryTransfer } from '../utils';
-import { NetMDFactoryInterface, DisplayMode, MemoryOpenType, MemoryType } from './netmd-factory-interface';
+import { NetMDFactoryInterface, DisplayMode, MemoryOpenType, MemoryType, RH1FactoryInterface } from './netmd-factory-interface';
 import { formatQuery, scanQuery } from '../query-utils';
 import JSBI from 'jsbi';
+
+export enum PatchPeripheralBase{
+    NETMD   = 0x03802000,
+    HIMD    = 0x03804000,
+};
 
 export async function display(factoryInterface: NetMDFactoryInterface, text: string | Uint8Array, blink: boolean = false) {
     await factoryInterface.setDisplayMode(DisplayMode.OVERRIDE);
@@ -56,22 +61,13 @@ export async function writeOfAnyLength(
     } while (arr.length > 0);
 }
 
-export async function readPatch(factoryInterface: NetMDFactoryInterface, patchNumber: number) {
-    const base = 0x03802000 + patchNumber * 0x10;
+export async function readPatch(factoryInterface: NetMDFactoryInterface, patchNumber: number, peripheralBase: PatchPeripheralBase = PatchPeripheralBase.NETMD) {
+    const base = peripheralBase + patchNumber * 0x10;
 
     const address = JSBI.toNumber(scanQuery(await cleanRead(factoryInterface, base + 4, 4, MemoryType.MAPPED), '%<d')[0] as any);
     const data = await cleanRead(factoryInterface, base + 8, 4, MemoryType.MAPPED);
 
     return { address, data };
-}
-
-export async function himdPatch(
-    factoryInterface: NetMDFactoryInterface,
-    address: number,
-    value: Uint8Array,
-    patchNumber: number,
-){
-    return patch(factoryInterface, address, value, patchNumber, 16, 0x03804000);
 }
 
 export async function patch(
@@ -80,7 +76,7 @@ export async function patch(
     value: Uint8Array,
     patchNumber: number,
     totalPatches: number,
-    peripheralBase: number = 0x03802000
+    peripheralBase: PatchPeripheralBase = PatchPeripheralBase.NETMD
 ) {
     // Original method written by Sir68k.
     assert(value.length === 4);
@@ -155,12 +151,12 @@ export async function writeUTOCSector(factoryInterface: NetMDFactoryInterface, s
     }
 }
 
-export async function getDescriptiveDeviceCode(input: NetMDFactoryInterface | { chipType: number; version: number }) {
-    let chipType, version;
-    if ((input as any).chipType !== undefined && (input as any).chipType !== undefined) {
-        ({ version, chipType } = input as any);
+export async function getDescriptiveDeviceCode(input: NetMDFactoryInterface | { chipType: number; version: number; subversion: number; }) {
+    let chipType: number, version: number, subversion: number;
+    if ((input as any).chipType !== undefined && (input as any).chipType !== undefined && (input as any).subversion !== undefined) {
+        ({ version, chipType, subversion } = input as any);
     } else {
-        ({ version, chipType } = await (input as NetMDFactoryInterface).getDeviceCode());
+        ({ version, chipType, subversion } = await (input as NetMDFactoryInterface).getDeviceCode());
     }
     let code = '';
     switch (chipType) {
@@ -170,14 +166,20 @@ export async function getDescriptiveDeviceCode(input: NetMDFactoryInterface | { 
         case 0x21:
             code = 'S';
             break;
+        case 0x22:
+            code = 'Hn';
+            break;
         case 0x24:
-            code = 'Hi';
+            code = 'Hr';
+            break;
+        case 0x25:
+            code = 'Hx';
             break;
         default:
             code = `${chipType}?`;
             break;
     }
     const [maj, min] = version.toString().split('');
-    code += `${maj}.${min}00`;
+    code += `${maj}.${min}${subversion.toString(16).toUpperCase().padStart(2, '0')}`;
     return code;
 }
