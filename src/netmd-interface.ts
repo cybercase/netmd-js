@@ -1134,7 +1134,7 @@ export class MDSession {
         this.hexSessionKey = retailmac(this.ekbobject.getRootKey(), nonce);
     }
 
-    async downloadTrack(trk: MDTrack, progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void) {
+    async downloadTrack(trk: MDTrack, progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void, discFormat = discforwire[trk.getDataFormat()]) {
         if (!this.hexSessionKey) {
             throw new Error(`Call init first!`);
         }
@@ -1143,7 +1143,7 @@ export class MDSession {
         let dataFormat = trk.getDataFormat();
         let [track, uuid, ccid] = await this.md.sendTrack(
             dataFormat,
-            discforwire[dataFormat],
+            discFormat,
             trk.getFrameCount(),
             trk.getTotalSize(),
             trk.getPacketWorkerIterator(),
