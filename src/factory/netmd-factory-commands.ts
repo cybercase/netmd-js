@@ -161,19 +161,22 @@ export async function getDescriptiveDeviceCode(input: NetMDFactoryInterface | { 
     let code = '';
     switch (chipType) {
         case 0x20:
-            code = 'R';
+            code = 'R'; // Type-R
             break;
         case 0x21:
-            code = 'S';
+            code = 'S'; // Type-S
+            break;
+        case 0x23:
+            code = 'Hp'; // DH10P
             break;
         case 0x22:
-            code = 'Hn';
+            code = 'Hn'; // MZ-NH*
             break;
         case 0x24:
-            code = 'Hr';
+            code = 'Hr'; // MZ-RH*
             break;
         case 0x25:
-            code = 'Hx';
+            code = 'Hx'; // MZ-RH1
             break;
         default:
             code = `${chipType}?`;
