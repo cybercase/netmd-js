@@ -22,6 +22,7 @@ import Crypto from '@originjs/crypto-js-wasm';
 import { NetMDNotImplemented, NetMDRejected, Status } from './netmd-shared-objects';
 import { HiMDFactoryInterface, NetMDFactoryInterface, RH1FactoryInterface } from './factory/netmd-factory-interface';
 import { getDescriptiveDeviceCode } from './factory';
+import { getEKBObject } from './netmd-ekb';
 
 enum Action {
     play = 0x75,
@@ -933,35 +934,6 @@ const discforwire: { [k: number]: number } = {
     [Wireformat.lp4]: DiscFormat.lp4,
 };
 
-export class EKBOpenSource {
-    getRootKey() {
-        // prettier-ignore
-        return new Uint8Array([
-            0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
-            0x0f, 0xed, 0xcb, 0xa9, 0x87, 0x65, 0x43, 0x21
-        ])
-    }
-
-    getEKBID() {
-        return 0x26422642;
-    }
-
-    getEKBDataForLeafId(): [Uint8Array[], number, Uint8Array] {
-        // prettier-ignore
-        return [
-            [
-                new Uint8Array([0x25, 0x45, 0x06, 0x4d, 0xea, 0xca, 0x14, 0xf9, 0x96, 0xbd, 0xc8, 0xa4, 0x06, 0xc2, 0x2b, 0x81]),
-                new Uint8Array([0xfb, 0x60, 0xbd, 0xdd, 0x0d, 0xbc, 0xab, 0x84, 0x8a, 0x00, 0x5e, 0x03, 0x19, 0x4d, 0x3e, 0xda]),
-            ],
-            9,
-            new Uint8Array([
-                0x8f, 0x2b, 0xc3, 0x52, 0xe8, 0x6c, 0x5e, 0xd3, 0x06, 0xdc, 0xae, 0x18,
-                0xd2, 0xf3, 0x8c, 0x7f, 0x89, 0xb5, 0xe1, 0x85, 0x55, 0xa1, 0x05, 0xea
-            ])
-        ];
-    }
-}
-
 export class MDTrack {
     constructor(
         public title: string,
@@ -1117,13 +1089,15 @@ export class MDTrack {
 }
 
 export class MDSession {
-    constructor(private md: NetMDInterface, private ekbobject: EKBOpenSource, private hexSessionKey?: string) {}
+    constructor(private md: NetMDInterface, private hexSessionKey?: string) {}
 
     async init() {
         await this.md.enterSecureSession();
-        await this.md.getLeafID(); // Panasonic compatibility
-        const [chain, depth, sig] = this.ekbobject.getEKBDataForLeafId();
-        await this.md.sendKeyData(JSBI.BigInt(this.ekbobject.getEKBID()), chain, depth, sig);
+        const leafId = await this.md.getLeafID(); // Panasonic compatibility
+        const deviceId = this.md.netMd.getProduct();
+        const ekbobject = await getEKBObject(leafId, deviceId);
+        const [chain, depth, sig] = ekbobject.getEKBDataForLeafId();
+        await this.md.sendKeyData(JSBI.BigInt(ekbobject.getEKBID()), chain, depth, sig);
         let hostnonce = new Uint8Array(
             Array(8)
                 .fill(0)
@@ -1131,7 +1105,7 @@ export class MDSession {
         );
         let devnonce = await this.md.sessionKeyExchange(hostnonce);
         let nonce = concatUint8Arrays(hostnonce, devnonce);
-        this.hexSessionKey = retailmac(this.ekbobject.getRootKey(), nonce);
+        this.hexSessionKey = retailmac(ekbobject.getRootKey(), nonce);
     }
 
     async downloadTrack(trk: MDTrack, progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void, discFormat = discforwire[trk.getDataFormat()]) {
