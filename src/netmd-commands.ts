@@ -217,11 +217,11 @@ export async function listContent(mdIface: NetMDInterface) {
 
         let tracks: Track[] = [];
         for (let [trackIndex, track] of trackLists.entries()) {
-            const title = await mdIface.getTrackTitle(track);
-            const fullWidthTitle = await mdIface.getTrackTitle(track, true);
             const [codec, channel] = await mdIface.getTrackEncoding(track);
             const duration = timeToFrames(await mdIface.getTrackLength(track));
             const flags = await mdIface.getTrackFlags(track);
+            const title = await mdIface.getTrackTitle(track);
+            const fullWidthTitle = await mdIface.getTrackTitle(track, true);
             let t = {
                 index: track,
                 title,
