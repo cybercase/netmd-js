@@ -1,5 +1,5 @@
 import { NetMD, DevicesIds } from './netmd';
-import { NetMDInterface, Encoding, Channels, TrackFlag, DiscFlag, MDTrack, MDSession, EKBOpenSource, Wireformat } from './netmd-interface';
+import { NetMDInterface, Encoding, Channels, TrackFlag, DiscFlag, MDTrack, MDSession } from './netmd-interface';
 import {
     timeToFrames,
     sanitizeHalfWidthTitle,
@@ -461,7 +461,7 @@ export async function download(
 ) {
     await prepareDownload(mdIface);
 
-    const session = new MDSession(mdIface, new EKBOpenSource());
+    const session = new MDSession(mdIface);
     await session.init();
     const [trk, uuid, ccid] = await session.downloadTrack(track, progressCallback);
 
