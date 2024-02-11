@@ -42,7 +42,7 @@ export async function openPairedDevice(usb: USB, logger?: Logger) {
 }
 
 export async function openNewDevice(usb: USB, logger?: Logger) {
-    let filters = DevicesIds.map(({ vendorId, deviceId }) => ({ vendorId, deviceId }));
+    let filters = DevicesIds.map(({ vendorId, deviceId }) => ({ vendorId, productId: deviceId }));
     let device: USBDevice;
     try {
         device = await usb.requestDevice({ filters });

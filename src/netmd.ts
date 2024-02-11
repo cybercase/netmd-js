@@ -2,7 +2,6 @@ import { inspect } from 'util';
 import { sleep, concatArrayBuffers } from './utils';
 import { Logger } from './logger';
 import Crypto from '@originjs/crypto-js-wasm';
-import { formatQuery } from './query-utils';
 
 const BULK_WRITE_ENDPOINT = 0x02;
 const BULK_READ_ENDPOINT = 0x01;
@@ -119,14 +118,9 @@ export class NetMD {
             },
             4
         );
-        let data = new Uint8Array(result.data?.buffer ?? []);
-        if(data[0] != 0x01 || data[1] != 0x81){
-            // Either no data, or response mistreated as length. return 0
-            return { len: 0, data };
-        }
-        const len = data[2];
+        const len = result.data?.getUint8(2) ?? 0;
         this.logger?.debug({ action: 'getReplyLength', result: inspect(result), len });
-        return { len, data };
+        return { len, data: result.data };
     }
 
     public async sendCommand(command: BufferSource) {
