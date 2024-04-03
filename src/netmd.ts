@@ -95,6 +95,10 @@ export class NetMD {
         return this.device.productId;
     }
 
+    isDeviceConnected(device: USBDevice) {
+        return this.device === device;
+    }
+
     async finalize() {
         this.logger?.debug('Finalize');
         try {
