@@ -114,9 +114,14 @@ export async function patch(
     await cleanWrite(factoryInterface, control, new Uint8Array([9]), MemoryType.MAPPED);
 }
 
-export async function unpatch(factoryInterface: NetMDFactoryInterface, patchNumber: number, totalPatches: number) {
-    const base = 0x03802000 + patchNumber * 0x10;
-    const control = 0x03802000 + totalPatches * 0x10;
+export async function unpatch(
+    factoryInterface: NetMDFactoryInterface,
+    patchNumber: number,
+    totalPatches: number,
+    peripheralBase: PatchPeripheralBase = PatchPeripheralBase.NETMD
+) {
+    const base = peripheralBase + patchNumber * 0x10;
+    const control = peripheralBase + totalPatches * 0x10;
 
     // Write 5, 12 to main control
     await cleanWrite(factoryInterface, control, new Uint8Array([5]), MemoryType.MAPPED);
