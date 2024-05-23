@@ -115,8 +115,6 @@ export class NetMDFactoryInterface {
     }
 
     public async read(address: number, length: number, type: MemoryType) {
-        if (type !== MemoryType.MAPPED && address + 8 > 0x400) throw new Error('SANITY CHECK');
-
         const reply = await this.sendQuery(formatQuery('1821 ff %b %<d %b', type, address, length));
         const res = scanQuery(reply, '1821 00 %? %?%?%?%? %? %?%? %*');
         const arr = [...(res[0] as Uint8Array)];
@@ -125,7 +123,6 @@ export class NetMDFactoryInterface {
     }
 
     public async write(address: number, data: Uint8Array, type: MemoryType) {
-        if (type !== MemoryType.MAPPED && address + 8 > 0x400) throw new Error('SANITY CHECK');
         const query = formatQuery('1822 ff %b %<d %b 0000 %* %<w', type, address, data.length, data, calculateChecksum(data, false));
         await this.sendQuery(query);
     }
