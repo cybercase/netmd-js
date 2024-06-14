@@ -310,9 +310,11 @@ export function compileDiscTitles(disc: Disc) {
         newRawFullWidthTitle = '';
     if (disc.title) newRawTitle = `0;${disc.title}//`;
     if (useFullWidth) newRawFullWidthTitle = `０；${disc.fullWidthTitle}／／`;
+    let groupHits = 0;
 
     for (let n of disc.groups) {
         if (n.title === null || n.tracks.length === 0) continue;
+        ++groupHits;
         const minGroupIndex = Math.min(...n.tracks.map(e => e.index));
         let range = `${minGroupIndex + 1}`;
         if (n.tracks.length !== 1) {
@@ -337,6 +339,12 @@ export function compileDiscTitles(disc: Disc) {
             // Try to fit as many groups as possible.
             newRawTitle = newRawTitleAfterGroup;
         }
+    }
+
+    if(groupHits === 0) {
+        // If there's no real groups, switch to original titles.
+        newRawTitle = disc.title;
+        newRawFullWidthTitle = disc.fullWidthTitle;
     }
 
     let halfWidthTitlesLengthInTOC = charsToCells(getHalfWidthTitleLength(newRawTitle)) * 7;
