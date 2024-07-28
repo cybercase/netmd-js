@@ -185,7 +185,7 @@ export class NetMDInterface {
 
     async factory() {
         const deviceName = this.netMd.getDeviceName();
-        const himd = deviceName.includes('MZ-RH') || deviceName.includes("MZ-NH");
+        const himd = deviceName.includes('MZ-RH') || deviceName.includes("MZ-NH") || deviceName.includes("DS-HMD1");
         
         await this._getDiscSubunitIdentifier();
         const constructor = himd ? HiMDFactoryInterface : NetMDFactoryInterface;
