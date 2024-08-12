@@ -6,8 +6,20 @@ import Crypto from '@originjs/crypto-js-wasm';
 const BULK_WRITE_ENDPOINT = 0x02;
 const BULK_READ_ENDPOINT = 0x01;
 
-export const DevicesIds = [
-    { vendorId: 0x04dd, deviceId: 0x7202, name: 'Sharp IM-MT899H' },
+export interface DeviceDefinition {
+    vendorId: number,
+    deviceId: number,
+    name: string,
+    flags?: DeviceFlags,
+}
+
+export interface DeviceFlags {
+    nativeMonoUpload?: boolean,
+    nativeLPEncoding?: boolean,
+}
+
+export const DevicesIds: DeviceDefinition[] = [
+    { vendorId: 0x04dd, deviceId: 0x7202, name: 'Sharp IM-MT899H',  },
     { vendorId: 0x04dd, deviceId: 0x9013, name: 'Sharp IM-DR400' },
     { vendorId: 0x04dd, deviceId: 0x9014, name: 'Sharp IM-DR80' },
     { vendorId: 0x054c, deviceId: 0x0034, name: 'Sony PCLK-XX' },
@@ -15,7 +27,7 @@ export const DevicesIds = [
     { vendorId: 0x054c, deviceId: 0x0075, name: 'Sony MZ-N1' },
     { vendorId: 0x054c, deviceId: 0x007c, name: 'Sony' },
     { vendorId: 0x054c, deviceId: 0x0080, name: 'Sony LAM-1' },
-    { vendorId: 0x054c, deviceId: 0x0081, name: 'Sony MDS-JB980/MDS-NT1/MDS-JE780' },
+    { vendorId: 0x054c, deviceId: 0x0081, name: 'Sony MDS-JB980/MDS-NT1/MDS-JE780', flags: { nativeMonoUpload: true } },
     { vendorId: 0x054c, deviceId: 0x0084, name: 'Sony MZ-N505' },
     { vendorId: 0x054c, deviceId: 0x0085, name: 'Sony MZ-S1' },
     { vendorId: 0x054c, deviceId: 0x0086, name: 'Sony MZ-N707' },
@@ -51,7 +63,7 @@ export const DevicesIds = [
     { vendorId: 0x054c, deviceId: 0x011a, name: 'Sony CMT-SE7' },
     { vendorId: 0x054c, deviceId: 0x0148, name: 'Sony MDS-A1' },
     { vendorId: 0x0b28, deviceId: 0x1004, name: 'Kenwood MDX-J9' },
-    { vendorId: 0x04da, deviceId: 0x23b3, name: 'Panasonic SJ-MR250' },
+    { vendorId: 0x04da, deviceId: 0x23b3, name: 'Panasonic SJ-MR250', flags: { nativeMonoUpload: true } },
     { vendorId: 0x04da, deviceId: 0x23b6, name: 'Panasonic SJ-MR270' },
 ];
 
@@ -97,6 +109,10 @@ export class NetMD {
 
     isDeviceConnected(device: USBDevice) {
         return this.device === device;
+    }
+
+    getDeviceFlags() {
+        return DevicesIds.find(e => e.deviceId === this.device.productId && e.vendorId === this.device.vendorId)?.flags ?? null;
     }
 
     async finalize() {
