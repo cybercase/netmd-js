@@ -145,7 +145,7 @@ export async function getDeviceStatus(mdIface: NetMDInterface): Promise<DeviceSt
 
     const time = position
         ? {
-              minute: position[2],
+              minute: position[2] + position[1] * 60,
               second: position[3],
               frame: position[4],
           }
