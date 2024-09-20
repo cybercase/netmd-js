@@ -64,7 +64,7 @@ export const DevicesIds: DeviceDefinition[] = [
     { vendorId: 0x054c, deviceId: 0x0148, name: 'Sony MDS-A1' },
     { vendorId: 0x0b28, deviceId: 0x1004, name: 'Kenwood MDX-J9' },
     { vendorId: 0x04da, deviceId: 0x23b3, name: 'Panasonic SJ-MR250', flags: { nativeMonoUpload: true } },
-    { vendorId: 0x04da, deviceId: 0x23b6, name: 'Panasonic SJ-MR270' },
+    { vendorId: 0x04da, deviceId: 0x23b6, name: 'Panasonic SJ-MR270', flags: { nativeMonoUpload: true } },
 ];
 
 export class NetMD {
