@@ -47,8 +47,8 @@ function calculateChecksum(data: Uint8Array, as16Bit: boolean, seed: number = 0)
     return crc;
 }
 
-export function calculateEEPROMChecksum(data: Uint8Array) {
-    return calculateChecksum(data, true);
+export function calculateEEPROMChecksum(data: Uint8Array, isHiMD = false) {
+    return calculateChecksum(data, true, isHiMD ? 0xA596 : 0);
 }
 
 export class NetMDFactoryInterface {
