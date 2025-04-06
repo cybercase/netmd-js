@@ -21,7 +21,7 @@ export interface DeviceFlags {
 export const DevicesIds: DeviceDefinition[] = [
     { vendorId: 0x04dd, deviceId: 0x7202, name: 'Sharp IM-MT899H',  },
     { vendorId: 0x04dd, deviceId: 0x9013, name: 'Sharp IM-DR400' },
-    { vendorId: 0x04dd, deviceId: 0x9014, name: 'Sharp IM-DR80' },
+    { vendorId: 0x04dd, deviceId: 0x9014, name: 'Sharp IM-DR80', flags: { nativeMonoUpload: true } },
     { vendorId: 0x054c, deviceId: 0x0034, name: 'Sony PCLK-XX' },
     { vendorId: 0x054c, deviceId: 0x0036, name: 'Sony' },
     { vendorId: 0x054c, deviceId: 0x0075, name: 'Sony MZ-N1' },
