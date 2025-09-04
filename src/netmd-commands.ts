@@ -478,3 +478,8 @@ export async function download(
 
     return [trk, uuid, ccid];
 }
+
+export async function formatToHiMD(mdIface: NetMDInterface) {
+    await mdIface.eraseDisc();
+    await mdIface.enterHiMDMode();
+}

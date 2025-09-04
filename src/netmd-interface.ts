@@ -738,6 +738,12 @@ export class NetMDInterface {
         return scanQuery(reply, '1800 080046 f0030103 81 00');
     }
 
+    async enterHiMDMode() {
+        const query = formatQuery('1800 080046 f0030104 82 ff');
+        const reply = await this.sendQuery(query);
+        return scanQuery(reply, '1800 080046 f0030104 82 00');
+    }
+
     async getLeafID() {
         const query = formatQuery('1800 080046 f0030103 11 ff');
         const reply = await this.sendQuery(query);
