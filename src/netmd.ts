@@ -222,7 +222,7 @@ export class NetMD {
             }
             done += res.data.byteLength;
             if (callback) callback(length, done);
-            buffer = concatArrayBuffers(buffer, res.data.buffer);
+            buffer = concatArrayBuffers(buffer, res.data.buffer as ArrayBuffer);
         }
         return buffer;
     }

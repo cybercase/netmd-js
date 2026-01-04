@@ -18,7 +18,7 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
         frameSize: number;
         kek: Uint8Array;
         chunkSize: number;
-    }): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
+    }): AsyncIterableIterator<{ key: Uint8Array<ArrayBuffer>; iv: Uint8Array<ArrayBuffer>; data: Uint8Array<ArrayBuffer> }> {
         const w = worker;
 
         const initWorker = () =>
@@ -44,9 +44,9 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
 
         let encryptedBytes = 0;
         let totalBytes = data.byteLength;
-        let chunks: Promise<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array } | null>[] = [];
+        let chunks: Promise<{ key: Uint8Array<ArrayBuffer>; iv: Uint8Array<ArrayBuffer>; data: Uint8Array<ArrayBuffer> } | null>[] = [];
         const queueNextChunk = () => {
-            let chunkPromise = new Promise<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array } | null>(resolve => {
+            let chunkPromise = new Promise<{ key: Uint8Array<ArrayBuffer>; iv: Uint8Array<ArrayBuffer>; data: Uint8Array<ArrayBuffer> } | null>(resolve => {
                 resolver = data => {
                     if (data !== null) {
                         encryptedBytes += data.byteLength;
@@ -97,7 +97,7 @@ if (isMainThread) {
                 parentPort!.postMessage(null);
                 process.exit(0);
             } else {
-                let { key, iv, data }: { key: Uint8Array; iv: Uint8Array; data: Uint8Array } = value;
+                let { key, iv, data }: { key: Uint8Array; iv: Uint8Array; data: Uint8Array<ArrayBuffer> } = value;
                 parentPort!.postMessage({ key, iv, data }, [data.buffer]);
             }
         }

@@ -226,7 +226,7 @@ export class NetMDInterface {
         await this.netMd.sendCommand(concatArrayBuffers(statusByte, query));
     }
 
-    async readReply(acceptInterim = false) {
+    async readReply(acceptInterim = false): Promise<ArrayBuffer> {
         let currentAttempt = 0;
         let data: DataView | undefined;
         while (currentAttempt < NetMDInterface.maxInterimReadAttempts) {
@@ -255,7 +255,7 @@ export class NetMDInterface {
         if (currentAttempt >= NetMDInterface.maxInterimReadAttempts) {
             throw new NetMDRejected('Max attempts read attempts for interim status reached');
         }
-        return data!.buffer.slice(1);
+        return data!.buffer.slice(1) as ArrayBuffer;
     }
 
     async acquire() {
@@ -841,7 +841,7 @@ export class NetMDInterface {
         discformat: number,
         frames: number,
         pktSize: number,
-        packets: AsyncIterable<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>,
+        packets: AsyncIterable<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array<ArrayBuffer> }>,
         hexSessionKey: string,
         progressCallback?: (progress: { writtenBytes: number; totalBytes: number }) => void
     ) {
@@ -866,7 +866,7 @@ export class NetMDInterface {
         let writtenBytes = 0;
         for await (const { key, iv, data } of packets) {
             progressCallback && progressCallback({ totalBytes, writtenBytes });
-            let binpack: Uint8Array;
+            let binpack: Uint8Array<ArrayBuffer>;
             if (packetCount === 0) {
                 let packedLength = new Uint8Array(new Uint32Array([pktSize]).buffer);
                 if (swapNeeded) {
@@ -953,7 +953,7 @@ export class MDTrack {
             frameSize: number;
             data: ArrayBuffer;
             chunkSize: number;
-        }) => AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }>
+        }) => AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array<ArrayBuffer> }>
     ) {}
 
     getFullWidthTitle() {
@@ -1024,7 +1024,7 @@ export class MDTrack {
         return [[datakey, firstiv, encryptedData]];
     }
 
-    getPacketWorkerIterator(): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
+    getPacketWorkerIterator(): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array<ArrayBuffer> }> {
         return this.encryptPacketsIterator!({
             kek: this.getKEK(),
             data: this.data,

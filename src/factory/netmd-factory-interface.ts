@@ -74,7 +74,7 @@ export class NetMDFactoryInterface {
         this.netMd.sendFactoryCommand(concatArrayBuffers(statusByte, query));
     }
 
-    async readReply(acceptInterim = false) {
+    async readReply(acceptInterim = false): Promise<ArrayBuffer> {
         let currentAttempt = 0;
         let data: DataView | undefined;
         while (currentAttempt < NetMDFactoryInterface.maxInterimReadAttempts) {
@@ -103,7 +103,7 @@ export class NetMDFactoryInterface {
         if (currentAttempt >= NetMDFactoryInterface.maxInterimReadAttempts) {
             throw new NetMDRejected('Max attempts read attempts for interim status reached');
         }
-        return data!.buffer.slice(1);
+        return data!.buffer.slice(1) as ArrayBuffer;
     }
 
     public async auth() {
@@ -131,7 +131,7 @@ export class NetMDFactoryInterface {
         const query = formatQuery('1824 ff %<w %<w %b', sector, offset, length);
         const reply = await this.sendQuery(query);
         const res = scanQuery(reply, '1824 00 %?%?%?%? %b %*');
-        return res[1] as Uint8Array;
+        return res[1] as Uint8Array<ArrayBuffer>;
     }
 
     public async writeMetadataPeripheral(sector: number, offset: number, data: Uint8Array) {

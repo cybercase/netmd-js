@@ -17,7 +17,7 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
         frameSize: number;
         kek: Uint8Array;
         chunkSize: number;
-    }): AsyncIterableIterator<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array }> {
+    }): AsyncIterableIterator<{ key: Uint8Array<ArrayBuffer>; iv: Uint8Array<ArrayBuffer>; data: Uint8Array<ArrayBuffer> }> {
         const w = worker;
         const initWorker = () =>
             new Promise(res => {
@@ -42,9 +42,9 @@ export function makeGetAsyncPacketIteratorOnWorkerThread(
 
         let encryptedBytes = 0;
         let totalBytes = data.byteLength;
-        let chunks: Promise<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array } | null>[] = [];
+        let chunks: Promise<{ key: Uint8Array<ArrayBuffer>; iv: Uint8Array<ArrayBuffer>; data: Uint8Array<ArrayBuffer> } | null>[] = [];
         const queueNextChunk = () => {
-            let chunkPromise = new Promise<{ key: Uint8Array; iv: Uint8Array; data: Uint8Array } | null>(resolve => {
+            let chunkPromise = new Promise<{ key: Uint8Array<ArrayBuffer>; iv: Uint8Array<ArrayBuffer>; data: Uint8Array<ArrayBuffer> } | null>(resolve => {
                 resolver = data => {
                     if (data !== null) {
                         encryptedBytes += data.data.byteLength;

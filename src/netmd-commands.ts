@@ -423,7 +423,7 @@ export async function upload(
     mdIface: NetMDInterface,
     track: number,
     progressCallback?: (progress: { readBytes: number; totalBytes: number }) => void
-): Promise<[DiscFormat, Uint8Array]> {
+): Promise<[DiscFormat, Uint8Array<ArrayBuffer>]> {
     const [format, frames, result] = await mdIface.saveTrackToArray(track, (l, r) => {
         progressCallback && progressCallback({ totalBytes: l, readBytes: r });
     });
